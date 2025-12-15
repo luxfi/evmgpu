@@ -1,0 +1,14 @@
+{
+  "title": "Lux EVM Documentation",
+  "pages": [
+    "index",
+    "opcodes",
+    "precompiles",
+    "state-management",
+    "transactions",
+    "gas-metering",
+    "contracts",
+    "tools",
+    "migration"
+  ]
+}

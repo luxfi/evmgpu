@@ -1,0 +1,83 @@
+//go:build e2e
+
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package utils
+
+import (
+	"encoding/json"
+	"os"
+
+	"github.com/luxfi/ids"
+	"github.com/luxfi/config"
+	"github.com/luxfi/vm/tests/fixture/tmpnet"
+
+	"github.com/luxfi/evm/plugin/evm"
+)
+
+var DefaultChainConfig = map[string]any{
+	"log-level":         "debug",
+	"warp-api-enabled":  true,
+	"local-txs-enabled": true,
+}
+
+func NewTmpnetNodes(count int) []*tmpnet.Node {
+	nodes := make([]*tmpnet.Node, count)
+	for i := range nodes {
+		node := tmpnet.NewNode()
+		node.EnsureKeys()
+		nodes[i] = node
+	}
+	return nodes
+}
+
+func NewTmpnetNetwork(owner string, nodes []*tmpnet.Node, flags tmpnet.FlagsMap, nets ...*tmpnet.Net) *tmpnet.Network {
+	defaultFlags := tmpnet.FlagsMap{}
+	defaultFlags.SetDefaults(flags)
+	defaultFlags.SetDefaults(tmpnet.FlagsMap{
+		config.ProposerVMUseCurrentHeightKey: "true",
+	})
+	return &tmpnet.Network{
+		Owner:        owner,
+		DefaultFlags: defaultFlags,
+		Nodes:        nodes,
+		Nets:         nets,
+	}
+}
+
+// Create the configuration that will enable creation and access to a
+// net created on a temporary network.
+func NewTmpnetNet(name string, genesisPath string, chainConfig map[string]any, nodes ...*tmpnet.Node) *tmpnet.Net {
+	if len(nodes) == 0 {
+		panic("a net must be validated by at least one node")
+	}
+
+	validatorIDs := make([]ids.NodeID, len(nodes))
+	for i, node := range nodes {
+		validatorIDs[i] = node.NodeID
+	}
+
+	genesisBytes, err := os.ReadFile(genesisPath)
+	if err != nil {
+		panic(err)
+	}
+
+	chainConfigBytes, err := json.Marshal(chainConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	return &tmpnet.Net{
+		Name: name,
+		Chains: []*tmpnet.Chain{
+			{
+				VMID:         evm.ID,
+				Genesis:      genesisBytes,
+				Config:       string(chainConfigBytes),
+				PreFundedKey: tmpnet.HardhatKey,
+			},
+		},
+		ValidatorIDs: validatorIDs,
+	}
+}

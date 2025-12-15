@@ -1,0 +1,21 @@
+name: Docker Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    uses: hanzoai/.github/.github/workflows/docker-build.yml@main
+    with:
+      image: ghcr.io/luxfi/evm
+      build-args: |
+        LUXD_NODE_IMAGE=ghcr.io/luxfi/node:latest
+      runner-amd64: lux-build
+    secrets: inherit
