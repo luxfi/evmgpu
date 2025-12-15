@@ -1,0 +1,33 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package messages
+
+import (
+	"errors"
+
+	"github.com/luxfi/codec"
+	"github.com/luxfi/codec/linearcodec"
+	"github.com/luxfi/constants"
+)
+
+const (
+	CodecVersion = 0
+
+	MaxMessageSize = 24 * constants.KiB
+)
+
+var Codec codec.Manager
+
+func init() {
+	Codec = codec.NewManager(MaxMessageSize)
+	lc := linearcodec.NewDefault()
+
+	err := errors.Join(
+		lc.RegisterType(&ValidatorUptime{}),
+		Codec.RegisterCodec(CodecVersion, lc),
+	)
+	if err != nil {
+		panic(err)
+	}
+}
