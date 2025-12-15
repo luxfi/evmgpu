@@ -1,0 +1,282 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package handlers
+
+import (
+	"context"
+	"math/big"
+	"testing"
+
+	"github.com/luxfi/constants"
+	"github.com/luxfi/crypto"
+	"github.com/luxfi/evmgpu/consensus/dummy"
+	"github.com/luxfi/evmgpu/core"
+	"github.com/luxfi/evmgpu/params"
+	"github.com/luxfi/evmgpu/plugin/evm/message"
+	"github.com/luxfi/evmgpu/sync/handlers/stats"
+	"github.com/luxfi/geth/common"
+	"github.com/luxfi/geth/core/rawdb"
+	"github.com/luxfi/geth/core/types"
+	"github.com/luxfi/geth/triedb"
+	"github.com/luxfi/ids"
+	"github.com/stretchr/testify/assert"
+)
+
+type blockRequestTest struct {
+	name string
+
+	// starting block, specify either Index or (hash+height)
+	startBlockIndex  int
+	startBlockHash   common.Hash
+	startBlockHeight uint64
+
+	requestedParents  uint16
+	expectedBlocks    int
+	expectNilResponse bool
+	assertResponse    func(t testing.TB, stats *stats.MockHandlerStats, b []byte)
+}
+
+func executeBlockRequestTest(t testing.TB, test blockRequestTest, blocks []*types.Block) {
+	mockHandlerStats := &stats.MockHandlerStats{}
+
+	// convert into map
+	blocksDB := make(map[common.Hash]*types.Block, len(blocks))
+	for _, blk := range blocks {
+		blocksDB[blk.Hash()] = blk
+	}
+	blockProvider := &TestBlockProvider{
+		GetBlockFn: func(hash common.Hash, height uint64) *types.Block {
+			blk, ok := blocksDB[hash]
+			if !ok || blk.NumberU64() != height {
+				return nil
+			}
+			return blk
+		},
+	}
+	blockRequestHandler := NewBlockRequestHandler(blockProvider, message.Codec, mockHandlerStats)
+
+	var blockRequest message.BlockRequest
+	if test.startBlockHash != (common.Hash{}) {
+		blockRequest.Hash = test.startBlockHash
+		blockRequest.Height = test.startBlockHeight
+	} else {
+		startingBlock := blocks[test.startBlockIndex]
+		blockRequest.Hash = startingBlock.Hash()
+		blockRequest.Height = startingBlock.NumberU64()
+	}
+	blockRequest.Parents = test.requestedParents
+
+	responseBytes, err := blockRequestHandler.OnBlockRequest(context.Background(), ids.GenerateTestNodeID(), 1, blockRequest)
+	if err != nil {
+		t.Fatal("unexpected error during block request", err)
+	}
+	if test.assertResponse != nil {
+		test.assertResponse(t, mockHandlerStats, responseBytes)
+	}
+
+	if test.expectNilResponse {
+		assert.Nil(t, responseBytes)
+		return
+	}
+
+	assert.NotEmpty(t, responseBytes)
+
+	var response message.BlockResponse
+	if _, err = message.Codec.Unmarshal(responseBytes, &response); err != nil {
+		t.Fatal("error unmarshalling", err)
+	}
+	assert.Len(t, response.Blocks, test.expectedBlocks)
+
+	for _, blockBytes := range response.Blocks {
+		block, err := types.DecodeBlock(blockBytes)
+		if err != nil {
+			t.Fatal("could not parse block header", err)
+		}
+		assert.GreaterOrEqual(t, test.startBlockIndex, 0)
+		assert.Equal(t, blocks[test.startBlockIndex].Hash(), block.Hash())
+		test.startBlockIndex--
+	}
+	mockHandlerStats.Reset()
+}
+
+func TestBlockRequestHandler(t *testing.T) {
+	// Use TestEVMChainConfig which doesn't activate Shanghai/Cancun to avoid RLP format mismatch
+	var gspec = &core.Genesis{
+		Config: params.TestEVMChainConfig,
+	}
+	memdb := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(memdb, nil)
+	genesis := gspec.MustCommit(memdb, tdb)
+	engine := dummy.NewETHFaker()
+	blocks, _, err := core.GenerateChain(params.TestEVMChainConfig, genesis, engine, memdb, 96, 0, func(i int, b *core.BlockGen) {})
+	if err != nil {
+		t.Fatal("unexpected error when generating test blockchain", err)
+	}
+	assert.Len(t, blocks, 96)
+
+	tests := []blockRequestTest{
+		{
+			name:             "handler_returns_blocks_as_requested",
+			startBlockIndex:  64,
+			requestedParents: 32,
+			expectedBlocks:   32,
+		},
+		{
+			name:             "handler_caps_blocks_parent_limit",
+			startBlockIndex:  95,
+			requestedParents: 96,
+			expectedBlocks:   64,
+		},
+		{
+			name:             "handler_handles_genesis",
+			startBlockIndex:  0,
+			requestedParents: 64,
+			expectedBlocks:   1,
+		},
+		{
+			name:              "handler_unknown_block",
+			startBlockHash:    common.BytesToHash([]byte("some block pls k thx bye")),
+			startBlockHeight:  1_000_000,
+			requestedParents:  64,
+			expectNilResponse: true,
+			assertResponse: func(t testing.TB, mockHandlerStats *stats.MockHandlerStats, _ []byte) {
+				assert.Equal(t, uint32(1), mockHandlerStats.MissingBlockHashCount)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			executeBlockRequestTest(t, test, blocks)
+		})
+	}
+}
+
+func TestBlockRequestHandlerLargeBlocks(t *testing.T) {
+	var (
+		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
+		funds   = big.NewInt(1000000000000000000)
+		gspec   = &core.Genesis{
+			Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
+			Alloc:  types.GenesisAlloc{common.Address(addr1): {Balance: funds}},
+		}
+		signer = types.LatestSigner(gspec.Config)
+	)
+	memdb := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(memdb, nil)
+	genesis := gspec.MustCommit(memdb, tdb)
+	engine := dummy.NewETHFaker()
+	blocks, _, err := core.GenerateChain(gspec.Config, genesis, engine, memdb, 96, 0, func(i int, b *core.BlockGen) {
+		var data []byte
+		switch {
+		case i <= 32:
+			data = make([]byte, constants.MiB)
+		default:
+			data = make([]byte, constants.MiB/16)
+		}
+		tx, err := types.SignTx(types.NewTransaction(b.TxNonce(common.Address(addr1)), common.Address(addr1), big.NewInt(10000), 4_215_304, nil, data), signer, key1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.AddTx(tx)
+	})
+	if err != nil {
+		t.Fatal("unexpected error when generating test blockchain", err)
+	}
+	assert.Len(t, blocks, 96)
+
+	tests := []blockRequestTest{
+		{
+			name:             "handler_returns_blocks_as_requested",
+			startBlockIndex:  64,
+			requestedParents: 10,
+			expectedBlocks:   10,
+		},
+		{
+			name:             "handler_caps_blocks_size_limit",
+			startBlockIndex:  64,
+			requestedParents: 16,
+			expectedBlocks:   15,
+		},
+		{
+			name:             "handler_caps_blocks_size_limit_on_first_block",
+			startBlockIndex:  32,
+			requestedParents: 10,
+			expectedBlocks:   1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			executeBlockRequestTest(t, test, blocks)
+		})
+	}
+}
+
+func TestBlockRequestHandlerCtxExpires(t *testing.T) {
+	// Use TestEVMChainConfig which doesn't activate Shanghai/Cancun to avoid RLP format mismatch
+	var gspec = &core.Genesis{
+		Config: params.TestEVMChainConfig,
+	}
+	memdb := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(memdb, nil)
+	genesis := gspec.MustCommit(memdb, tdb)
+	engine := dummy.NewETHFaker()
+	blocks, _, err := core.GenerateChain(params.TestEVMChainConfig, genesis, engine, memdb, 11, 0, func(i int, b *core.BlockGen) {})
+	if err != nil {
+		t.Fatal("unexpected error when generating test blockchain", err)
+	}
+
+	assert.Len(t, blocks, 11)
+
+	// convert into map
+	blocksDB := make(map[common.Hash]*types.Block, 11)
+	for _, blk := range blocks {
+		blocksDB[blk.Hash()] = blk
+	}
+
+	cancelAfterNumRequests := 2
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	blockRequestCallCount := 0
+	blockProvider := &TestBlockProvider{
+		GetBlockFn: func(hash common.Hash, height uint64) *types.Block {
+			blockRequestCallCount++
+			// cancel ctx after the 2nd call to simulate ctx expiring due to deadline exceeding
+			if blockRequestCallCount >= cancelAfterNumRequests {
+				cancel()
+			}
+			blk, ok := blocksDB[hash]
+			if !ok || blk.NumberU64() != height {
+				return nil
+			}
+			return blk
+		},
+	}
+	blockRequestHandler := NewBlockRequestHandler(blockProvider, message.Codec, stats.NewNoopHandlerStats())
+
+	responseBytes, err := blockRequestHandler.OnBlockRequest(ctx, ids.GenerateTestNodeID(), 1, message.BlockRequest{
+		Hash:    blocks[10].Hash(),
+		Height:  blocks[10].NumberU64(),
+		Parents: uint16(8),
+	})
+	if err != nil {
+		t.Fatal("unexpected error from BlockRequestHandler", err)
+	}
+	assert.NotEmpty(t, responseBytes)
+
+	var response message.BlockResponse
+	if _, err = message.Codec.Unmarshal(responseBytes, &response); err != nil {
+		t.Fatal("error unmarshalling", err)
+	}
+	// requested 8 blocks, received cancelAfterNumRequests because of timeout
+	assert.Len(t, response.Blocks, cancelAfterNumRequests)
+
+	for i, blockBytes := range response.Blocks {
+		block, err := types.DecodeBlock(blockBytes)
+		if err != nil {
+			t.Fatal("could not parse block header", err)
+		}
+		assert.Equal(t, blocks[len(blocks)-i-1].Hash(), block.Hash())
+	}
+}

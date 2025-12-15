@@ -1,0 +1,14 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+package gatherer
+
+import "github.com/luxfi/geth/metrics"
+
+var _ Registry = metrics.Registry(nil)
+
+type Registry interface {
+	// Call the given function for each registered metric.
+	Each(func(string, any))
+	// Get the metric by the given name or nil if none is registered.
+	Get(string) any
+}
