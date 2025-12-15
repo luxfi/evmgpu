@@ -1,0 +1,61 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package warp
+
+import (
+	"fmt"
+
+	"github.com/luxfi/evmgpu/precompile/contract"
+	"github.com/luxfi/evmgpu/precompile/modules"
+	"github.com/luxfi/evmgpu/precompile/precompileconfig"
+
+	"github.com/luxfi/geth/common"
+)
+
+var _ contract.Configurator = (*configurator)(nil)
+
+// ConfigKey is the key used in json config files to specify this precompile config.
+// must be unique across all precompiles.
+const ConfigKey = "warpConfig"
+
+// LP-aligned address: P=6 (LP-6xxx Bridges), C=2 (C-Chain), II=01 (Warp)
+var ContractAddress = common.HexToAddress("0x16201")
+
+// Module is the precompile module. It is used to register the precompile contract.
+var Module = modules.Module{
+	ConfigKey:    ConfigKey,
+	Address:      ContractAddress,
+	Contract:     WarpPrecompile,
+	Configurator: &configurator{},
+}
+
+type configurator struct{}
+
+func init() {
+	// Register the precompile module.
+	// Each precompile contract registers itself through [RegisterModule] function.
+	if err := modules.RegisterModule(Module); err != nil {
+		panic(err)
+	}
+}
+
+// MakeConfig returns a new precompile config instance.
+// This is required to Marshal/Unmarshal the precompile config.
+func (*configurator) MakeConfig() precompileconfig.Config {
+	return new(Config)
+}
+
+// MakeGenesisConfig returns a precompile config for genesis activation (timestamp = 0).
+func (*configurator) MakeGenesisConfig() precompileconfig.Config {
+	var zero uint64
+	return NewDefaultConfig(&zero)
+}
+
+// Configure is a no-op for warp since it does not need to store any information in the state
+func (*configurator) Configure(chainConfig precompileconfig.ChainConfig, cfg precompileconfig.Config, state contract.StateDB, _ contract.ConfigurationBlockContext) error {
+	if _, ok := cfg.(*Config); !ok {
+		return fmt.Errorf("expected config type %T, got %T: %v", &Config{}, cfg, cfg)
+	}
+	return nil
+}

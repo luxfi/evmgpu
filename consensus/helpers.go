@@ -1,0 +1,88 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package consensus
+
+import (
+	"context"
+
+	"github.com/luxfi/crypto/bls"
+	"github.com/luxfi/ids"
+	consensuscontext "github.com/luxfi/runtime"
+)
+
+// Context keys for consensus-related values
+type contextKey string
+
+const (
+	chainIDKey    contextKey = "chainID"
+	networkIDKey  contextKey = "networkID"
+	warpSignerKey contextKey = "warpSigner"
+)
+
+// GetChainID retrieves the chain ID from the context
+func GetChainID(ctx context.Context) ids.ID {
+	if v := ctx.Value(chainIDKey); v != nil {
+		if chainID, ok := v.(ids.ID); ok {
+			return chainID
+		}
+	}
+	// Return empty ID if not found
+	return ids.Empty
+}
+
+// GetNetworkID retrieves the network ID from the context
+func GetNetworkID(ctx context.Context) uint32 {
+	if v := ctx.Value(networkIDKey); v != nil {
+		if networkID, ok := v.(uint32); ok {
+			return networkID
+		}
+	}
+	// Return default network ID
+	return 1
+}
+
+// WarpSigner is an interface for signing warp messages
+type WarpSigner interface {
+	PublicKey() *bls.PublicKey
+	Sign(msg []byte) (*bls.Signature, error)
+	SignProofOfPossession(msg []byte) (*bls.Signature, error)
+}
+
+// GetWarpSigner retrieves the warp signer from the context
+func GetWarpSigner(ctx context.Context) WarpSigner {
+	if v := ctx.Value(warpSignerKey); v != nil {
+		if signer, ok := v.(WarpSigner); ok {
+			return signer
+		}
+	}
+	// Return nil if not found
+	return nil
+}
+
+// WithChainID adds a chain ID to the context
+func WithChainID(ctx context.Context, chainID ids.ID) context.Context {
+	return context.WithValue(ctx, chainIDKey, chainID)
+}
+
+// WithNetworkID adds a network ID to the context
+func WithNetworkID(ctx context.Context, networkID uint32) context.Context {
+	return context.WithValue(ctx, networkIDKey, networkID)
+}
+
+// WithWarpSigner adds a warp signer to the context
+func WithWarpSigner(ctx context.Context, signer WarpSigner) context.Context {
+	return context.WithValue(ctx, warpSignerKey, signer)
+}
+
+// WithValidatorState adds a validator state to the context
+// Delegates to the external consensus context package for consistency
+func WithValidatorState(ctx context.Context, state consensuscontext.ValidatorState) context.Context {
+	return consensuscontext.WithValidatorState(ctx, state)
+}
+
+// GetValidator retrieves the validator state from the context
+// Delegates to the external consensus context package for consistency
+func GetValidator(ctx context.Context) consensuscontext.ValidatorState {
+	return consensuscontext.GetValidatorState(ctx)
+}

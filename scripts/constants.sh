@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# Ignore warnings about variables appearing unused since this file is not the consumer of the variables it defines.
+# shellcheck disable=SC2034
+
+set -euo pipefail
+
+# Set the PATHS
+GOPATH="$(go env GOPATH)"
+DEFAULT_PLUGIN_DIR="${HOME}/.lux/plugins"
+DEFAULT_VM_NAME="evm"
+DEFAULT_VM_ID="srEXiWaHuhNyGwPUi444Tu47ZEDwxTWrbQiuD7FmgSAQ6X7Dy"
+
+# Lux docker hub
+# luxfi/node - defaults to local as to avoid unintentional pushes
+# You should probably set it - export IMAGE_NAME='luxfi/evm'
+IMAGE_NAME=${IMAGE_NAME:-"evm_luxd"}
+
+# Shared between ./scripts/build_docker_image.sh and ./scripts/tests.build_docker_image.sh
+LUXD_IMAGE_NAME="${LUXD_IMAGE_NAME:-luxfi/node}"
+
+# if this isn't a git repository (say building from a release), don't set our git constants.
+if [ ! -d .git ]; then
+    CURRENT_BRANCH=""
+    EVM_COMMIT=""
+else
+    # Current branch
+    CURRENT_BRANCH=${CURRENT_BRANCH:-$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD || git rev-parse --short HEAD || :)}
+
+    # Image build id
+    #
+    # Use an abbreviated version of the full commit to tag the image.
+    # WARNING: this will use the most recent commit even if there are un-committed changes present
+    EVM_COMMIT="$(git --git-dir="$EVM_PATH/.git" rev-parse HEAD || :)"
+fi
+
+# Don't export them as they're used in the context of other calls
+if [[ -z ${LUX_VERSION:-} ]]; then
+  # Get module details from go.mod - try node first, then luxd
+  MODULE_DETAILS="$(go list -m "github.com/luxfi/node" 2>/dev/null || go list -m "github.com/luxfi/luxd" 2>/dev/null || echo "")"
+
+  LUX_VERSION="$(echo "${MODULE_DETAILS}" | awk '{print $2}')"
+
+  # Check if the version matches the pattern where the last part is the module hash
+  # v*YYYYMMDDHHMMSS-abcdef123456
+  #
+  # If not, the value is assumed to represent a tag
+  if [[ "${LUX_VERSION}" =~ ^v.*[0-9]{14}-[0-9a-f]{12}$ ]]; then
+    MODULE_HASH="$(echo "${LUX_VERSION}" | grep -Eo '[0-9a-f]{12}$')"
+
+    # The first 8 chars of the hash is used as the tag of luxd images
+    LUX_VERSION="${MODULE_HASH::8}"
+  fi
+fi
+
+# Shared between ./scripts/build_docker_image.sh and ./scripts/tests.build_docker_image.sh
+DOCKERHUB_TAG="${EVM_COMMIT::8}_${LUX_VERSION}"
+# WARNING: this will use the most recent commit even if there are un-committed changes present
+BUILD_IMAGE_ID=${BUILD_IMAGE_ID:-"${CURRENT_BRANCH}_${LUX_VERSION}"}
+
+echo "Using branch: ${CURRENT_BRANCH}"
+
+# Static compilation
+STATIC_LD_FLAGS=''
+if [ "${STATIC_COMPILATION:-}" = 1 ]; then
+  export CC=musl-gcc
+  command -v $CC || (echo $CC must be available for static compilation && exit 1)
+  STATIC_LD_FLAGS=' -extldflags "-static" -linkmode external '
+fi
+
+# Set the CGO flags to use the portable version of BLST
+#
+# We use "export" here instead of just setting a bash variable because we need
+# to pass this flag to all child processes spawned by the shell.
+export CGO_CFLAGS="-O2 -D__BLST_PORTABLE__"
+
+# CGO_ENABLED is required for multi-arch builds.
+export CGO_ENABLED=1

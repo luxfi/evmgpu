@@ -1,0 +1,77 @@
+./main
+
+*.log
+*~
+.DS_Store
+
+awscpu
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.profile
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# ignore GoLand metafiles directory
+.idea/
+
+*logs/
+!*customlogs/
+
+.vscode*
+workspace.code-workspace
+
+*.pb*
+
+*cpu[0-9]*
+*mem[0-9]*
+*lock[0-9]*
+*.profile
+*.swp
+*.aux
+*.fdb*
+*.fls
+*.gz
+*.pdf
+
+.coverage
+
+bin/
+build/
+
+cmd/evm/evm
+cmd/simulator/.simulator/*
+cmd/simulator/simulator
+
+# goreleaser
+dist/
+
+*.orig
+.tmp
+
+
+runtime
+
+# LLM documentation files (symlinked)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+
+# LLM documentation files (ignored, not committed)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+QWEN.md
+
+LLM.md
+QWEN.md
+.AGENTS.md
+GEMINI.md

@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1
+# ============= Setting up base Stage ================
+# LUXD_NODE_IMAGE needs to identify an existing node image and should include the tag
+# This value is not intended to be used but silences a warning
+ARG LUXD_NODE_IMAGE="invalid-image"
+
+# ============= Compilation Stage ================
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS builder
+
+WORKDIR /build
+
+# Copy lux dependencies first (intermediate docker image caching)
+# Copy luxd directory if present (for manual CI case, which uses local dependency)
+COPY go.mod go.sum luxd* ./
+ENV GONOSUMCHECK=github.com/luxfi/*
+ENV GONOSUMDB=github.com/luxfi/*
+ENV GONOPROXY=github.com/luxfi/*
+ENV GOFLAGS=-mod=mod
+# Download lux dependencies using go mod
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go mod download && go mod tidy
+
+# Copy the code into the container
+COPY . .
+
+# Ensure pre-existing builds are not available for inclusion in the final image
+RUN [ -d ./build ] && rm -rf ./build/* || true
+
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Configure a cross-compiler if the target platform differs from the build platform.
+#
+# build_env.sh is used to capture the environmental changes required by the build step since RUN
+# environment state is not otherwise persistent.
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ] && [ "$BUILDPLATFORM" != "linux/arm64" ]; then \
+  apt-get update && apt-get install -y gcc-aarch64-linux-gnu && \
+  echo "export CC=aarch64-linux-gnu-gcc" > ./build_env.sh \
+  ; elif [ "$TARGETPLATFORM" = "linux/amd64" ] && [ "$BUILDPLATFORM" != "linux/amd64" ]; then \
+  apt-get update && apt-get install -y gcc-x86-64-linux-gnu && \
+  echo "export CC=x86_64-linux-gnu-gcc" > ./build_env.sh \
+  ; else \
+  echo "export CC=gcc" > ./build_env.sh \
+  ; fi
+
+# Pass in EVM_COMMIT as an arg to allow the build script to set this externally
+ARG EVM_COMMIT
+ARG CURRENT_BRANCH
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    . ./build_env.sh && \
+  echo "{CC=$CC, TARGETPLATFORM=$TARGETPLATFORM, BUILDPLATFORM=$BUILDPLATFORM}" && \
+  export GOARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) && \
+  export CURRENT_BRANCH=$CURRENT_BRANCH && \
+  export EVM_COMMIT=$EVM_COMMIT && \
+  ./scripts/build.sh build/evm
+
+# ============= Cleanup Stage ================
+FROM $LUXD_NODE_IMAGE AS execution
+
+# Copy the evm binary into the correct location in the container
+ARG VM_ID=srEXiWaHuhNyGwPUi444Tu47ZEDwxTWrbQiuD7FmgSAQ6X7Dy
+ENV LUXD_PLUGIN_DIR="/luxd/build/plugins"
+COPY --from=builder /build/build/evm $LUXD_PLUGIN_DIR/$VM_ID
