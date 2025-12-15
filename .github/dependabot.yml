@@ -1,0 +1,34 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  - package-ecosystem: "gomod" # See documentation for possible values
+    directory: "/" # Location of package manifests
+    schedule:
+      interval: "daily"
+    ignore:
+      - dependency-name: "github.com/luxfi/node" # manually updated
+      - dependency-name: "github.com/VictoriaMetrics/fastcache" # geth dependency
+      - dependency-name: "github.com/hashicorp/go-bexpr" # geth dependency
+      - dependency-name: "github.com/holiman/*" # geth dependency
+      - dependency-name: "github.com/holiman/billy" # geth dependency
+      - dependency-name: "github.com/holiman/bloomfilter/v2" # geth dependency
+      - dependency-name: "github.com/holiman/uint256" # geth dependency
+      - dependency-name: "github.com/mattn/go-colorable" # geth dependency
+      - dependency-name: "github.com/mattn/go-isatty" # geth dependency
+      - dependency-name: "github.com/tyler-smith/go-bip39" # geth dependency
+      - dependency-name: "github.com/urfave/cli/v2" # geth dependency
+      - dependency-name: "golang.org/x/time" # geth dependency
+      - dependency-name: "gopkg.in/natefinch/lumberjack.v2" # geth dependency
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "luxfi/node/.github/actions/run-monitored-tmpnet-cmd" # manually updated
+      - dependency-name: "golangci/golangci-lint-action"
+        versions:
+          - ">=7.0.0" # versions from 7.0.0 only support golangci-lint v2.x.x

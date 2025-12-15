@@ -1,0 +1,59 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package deployerallowlist
+
+import (
+	"fmt"
+
+	"github.com/luxfi/evmgpu/precompile/contract"
+	"github.com/luxfi/evmgpu/precompile/modules"
+	"github.com/luxfi/evmgpu/precompile/precompileconfig"
+	"github.com/luxfi/geth/common"
+)
+
+var _ contract.Configurator = (*configurator)(nil)
+
+// ConfigKey is the key used in json config files to specify this precompile config.
+// must be unique across all precompiles.
+const ConfigKey = "contractDeployerAllowListConfig"
+
+// LP-aligned address: P=0 (Core), C=2 (C-Chain), II=01
+var ContractAddress = common.HexToAddress("0x10201")
+
+var Module = modules.Module{
+	ConfigKey:    ConfigKey,
+	Address:      ContractAddress,
+	Contract:     ContractDeployerAllowListPrecompile,
+	Configurator: &configurator{},
+}
+
+type configurator struct{}
+
+func init() {
+	if err := modules.RegisterModule(Module); err != nil {
+		panic(err)
+	}
+}
+
+// MakeConfig returns a new precompile config instance.
+// This is required to Marshal/Unmarshal the precompile config.
+func (*configurator) MakeConfig() precompileconfig.Config {
+	return new(Config)
+}
+
+// MakeGenesisConfig returns a precompile config for genesis activation (timestamp = 0).
+func (*configurator) MakeGenesisConfig() precompileconfig.Config {
+	var zero uint64
+	return NewConfig(&zero, nil, nil, nil)
+}
+
+// Configure configures [state] with the given [cfg] precompileconfig.
+// This function is called by the EVM once per precompile contract activation.
+func (c *configurator) Configure(chainConfig precompileconfig.ChainConfig, cfg precompileconfig.Config, state contract.StateDB, blockContext contract.ConfigurationBlockContext) error {
+	config, ok := cfg.(*Config)
+	if !ok {
+		return fmt.Errorf("expected config type %T, got %T: %v", &Config{}, cfg, cfg)
+	}
+	return config.Configure(chainConfig, ContractAddress, state, blockContext)
+}

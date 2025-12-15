@@ -1,0 +1,42 @@
+name: Trigger Antithesis
+
+# Disabled: Antithesis is an external testing service (antithesishq) that
+# requires paid credentials we do not have configured. The daily cron was
+# failing with 403 Forbidden. Kept as workflow_dispatch for future use.
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'The duration (in hours) to run the test for'
+        default: '0.5'
+        required: true
+        type: string
+      recipients:
+        description: 'Comma-separated email addresses to send the test report to'
+        required: true
+        type: string
+      image_tag:
+        description: 'The image tag to target'
+        default: latest
+        required: true
+        type: string
+
+jobs:
+  antithesis:
+    name: Run Antithesis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: antithesishq/antithesis-trigger-action@6c0a27302c0a3cd97d87d40bd6704e673abed4bb #v0.9
+        with:
+          notebook_name: lux-evm
+          tenant: lux
+          username: ${{ secrets.ANTITHESIS_USERNAME }}
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.ANTITHESIS_GH_PAT }}
+          config_image: antithesis-lux-evm-config:${{ github.event.inputs.image_tag || 'latest' }}
+          images: antithesis-lux-evm-workload:${{ github.event.inputs.image_tag || 'latest' }};antithesis-lux-evm-node:${{ github.event.inputs.image_tag || 'latest' }}
+          email_recipients: ${{ github.event.inputs.recipients || secrets.ANTITHESIS_RECIPIENTS }}
+          # Duration is in hours
+          additional_parameters: |-
+            custom.duration=${{ github.event.inputs.duration || '7.5' }}
+            custom.workload=lux-evm

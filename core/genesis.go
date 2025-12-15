@@ -1,0 +1,565 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+//
+// This file is a derived work, based on the go-ethereum library whose original
+// notices appear below.
+//
+// It is distributed under a license compatible with the licensing terms of the
+// original code from which it is derived.
+//
+// Much love to the original authors for their work.
+// **********
+// Copyright 2014 The go-ethereum Authors
+// This file is part of the go-ethereum library.
+//
+// The go-ethereum library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The go-ethereum library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+
+package core
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/holiman/uint256"
+	"github.com/luxfi/crypto"
+	"github.com/luxfi/evmgpu/core/state"
+	"github.com/luxfi/evmgpu/params"
+	"github.com/luxfi/evmgpu/plugin/evm/customrawdb"
+	"github.com/luxfi/evmgpu/plugin/evm/customtypes"
+	"github.com/luxfi/evmgpu/plugin/evm/upgrade/legacy"
+	"github.com/luxfi/geth/common"
+	"github.com/luxfi/geth/common/hexutil"
+	"github.com/luxfi/geth/core/rawdb"
+	"github.com/luxfi/geth/core/tracing"
+	"github.com/luxfi/geth/core/types"
+	"github.com/luxfi/geth/ethdb"
+	ethparams "github.com/luxfi/geth/params"
+	"github.com/luxfi/geth/trie"
+	"github.com/luxfi/geth/triedb"
+	"github.com/luxfi/geth/triedb/pathdb"
+	log "github.com/luxfi/log"
+	"github.com/luxfi/math"
+)
+
+//go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
+
+var errGenesisNoConfig = errors.New("genesis has no chain configuration")
+
+// Deprecated: use types.Account instead.
+type GenesisAccount = types.Account
+
+// Deprecated: use types.GenesisAlloc instead.
+type GenesisAlloc = types.GenesisAlloc
+
+type Airdrop struct {
+	// Address strings are hex-formatted common.Address
+	Address common.Address `json:"address"`
+}
+
+// Genesis specifies the header fields, state of a genesis block. It also defines hard
+// fork switch-over blocks through the chain configuration.
+type Genesis struct {
+	Config        *params.ChainConfig `json:"config"`
+	Nonce         uint64              `json:"nonce"`
+	Timestamp     uint64              `json:"timestamp"`
+	ExtraData     []byte              `json:"extraData"`
+	GasLimit      uint64              `json:"gasLimit"   gencodec:"required"`
+	Difficulty    *big.Int            `json:"difficulty" gencodec:"required"`
+	Mixhash       common.Hash         `json:"mixHash"`
+	Coinbase      common.Address      `json:"coinbase"`
+	Alloc         types.GenesisAlloc  `json:"alloc"      gencodec:"required"`
+	AirdropHash   common.Hash         `json:"airdropHash"`
+	AirdropAmount *big.Int            `json:"airdropAmount"`
+	AirdropData   []byte              `json:"-"` // provided in a separate file, not serialized in this struct.
+
+	// These fields are used for consensus tests. Please don't use them
+	// in actual genesis blocks.
+	Number        uint64      `json:"number"`
+	GasUsed       uint64      `json:"gasUsed"`
+	ParentHash    common.Hash `json:"parentHash"`
+	BaseFee       *big.Int    `json:"baseFeePerGas"` // EIP-1559
+	ExcessBlobGas *uint64     `json:"excessBlobGas"` // EIP-4844
+	BlobGasUsed   *uint64     `json:"blobGasUsed"`   // EIP-4844
+}
+
+// field type overrides for gencodec
+type genesisSpecMarshaling struct {
+	Nonce         math.HexOrDecimal64
+	Timestamp     math.HexOrDecimal64
+	ExtraData     hexutil.Bytes
+	GasLimit      math.HexOrDecimal64
+	GasUsed       math.HexOrDecimal64
+	Number        math.HexOrDecimal64
+	Difficulty    *math.HexOrDecimal256
+	Alloc         map[common.UnprefixedAddress]types.Account
+	BaseFee       *math.HexOrDecimal256
+	AirdropAmount *math.HexOrDecimal256
+	ExcessBlobGas *math.HexOrDecimal64
+	BlobGasUsed   *math.HexOrDecimal64
+}
+
+// GenesisMismatchError is raised when trying to overwrite an existing
+// genesis block with an incompatible one.
+type GenesisMismatchError struct {
+	Stored, New common.Hash
+}
+
+func (e *GenesisMismatchError) Error() string {
+	return fmt.Sprintf("database contains incompatible genesis (have %x, new %x)", e.Stored, e.New)
+}
+
+// SetupGenesisBlock writes or updates the genesis block in db.
+// The block that will be used is:
+//
+//	                     genesis == nil       genesis != nil
+//	                  +------------------------------------------
+//	db has no genesis |  main-net default  |  genesis
+//	db has genesis    |  from DB           |  genesis (if compatible)
+
+// The argument [genesis] must be specified and must contain a valid chain config.
+// If the genesis block has already been set up, then we verify the hash matches the genesis passed in
+// and that the chain config contained in genesis is backwards compatible with what is stored in the database.
+//
+// The stored chain configuration will be updated if it is compatible (i.e. does not
+// specify a fork block below the local head block). In case of a conflict, the
+// error is a *params.ConfigCompatError and the new, unwritten config is returned.
+func SetupGenesisBlock(
+	db ethdb.Database, triedb *triedb.Database, genesis *Genesis, lastAcceptedHash common.Hash, skipChainConfigCheckCompatible bool,
+) (*params.ChainConfig, common.Hash, error) {
+	// If no genesis is provided, try to use existing chain data
+	if genesis == nil {
+		// Check if we have a stored genesis block
+		stored := rawdb.ReadCanonicalHash(db, 0)
+		if stored == (common.Hash{}) {
+			// No genesis provided and no stored genesis - this is an error
+			return nil, common.Hash{}, ErrNoGenesis
+		}
+		// We have a stored genesis, use it
+		storedcfg := customrawdb.ReadChainConfig(db, stored)
+		if storedcfg == nil {
+			// We have a genesis block but no config - this shouldn't happen
+			return nil, common.Hash{}, errGenesisNoConfig
+		}
+		return storedcfg, stored, nil
+	}
+	if genesis.Config == nil {
+		return nil, common.Hash{}, errGenesisNoConfig
+	}
+	// Just commit the new block if there is no stored genesis block.
+	stored := rawdb.ReadCanonicalHash(db, 0)
+	if (stored == common.Hash{}) {
+		log.Info("Writing genesis to database")
+		block, err := genesis.Commit(db, triedb)
+		if err != nil {
+			return genesis.Config, common.Hash{}, err
+		}
+		return genesis.Config, block.Hash(), nil
+	}
+	// The genesis block is present(perhaps in ancient database) while the
+	// state database is not initialized yet. It can happen that the node
+	// is initialized with an external ancient store. Commit genesis state
+	// in this case.
+	header := rawdb.ReadHeader(db, stored, 0)
+	if header != nil && header.Root != types.EmptyRootHash {
+		// Check if the root exists in the database
+		if _, err := triedb.NodeReader(header.Root); err != nil {
+			// Genesis state root is not accessible. This can happen for two reasons:
+			//
+			// 1. Fresh chain with external ancient store: genesis block exists but
+			//    state was never committed. Recommit is needed and safe.
+			//
+			// 2. Established chain after RLP import or long operation: genesis state
+			//    root has been pruned by pathdb (which only maintains recent state).
+			//    Recommitting would PANIC because pathdb's layer tree doesn't contain
+			//    the EmptyRootHash needed as a parent layer for genesis state creation.
+			//
+			// We distinguish these cases by checking if the chain has progressed
+			// past genesis (block 1+ exists). If so, genesis state pruning is
+			// expected and safe to skip.
+			block1Hash := rawdb.ReadCanonicalHash(db, 1)
+			if (block1Hash != common.Hash{}) {
+				// Chain has blocks beyond genesis - genesis state was pruned by pathdb.
+				// This is expected behavior after admin_importChain or normal operation.
+				// The current head state is what matters, not the genesis state.
+				log.Info("Genesis state pruned (expected for established chain)",
+					"genesisRoot", header.Root.Hex(),
+					"block1", block1Hash.Hex())
+			} else {
+				// Chain hasn't progressed past genesis - recommit may be needed.
+				// For PathDB: genesis.Commit() panics if EmptyRootHash is not a parent layer
+				// in the PathDB layer tree. This only happens when PathDB has already committed
+				// blocks beyond genesis (post-import-crash: AcceptorTip > genesis hash).
+				// For fresh PathDB (AcceptorTip empty or at genesis), EmptyRootHash IS the
+				// disk layer and recommit is safe.
+				if triedb.Scheme() == rawdb.PathScheme {
+					acceptorTip, _ := customrawdb.ReadAcceptorTip(db)
+					if acceptorTip != (common.Hash{}) && acceptorTip != stored {
+						log.Warn("Genesis state not accessible with PathDB - skipping recommit (post-import-crash recovery)",
+							"root", header.Root.Hex(), "acceptorTip", acceptorTip.Hex())
+						return genesis.Config, stored, nil
+					}
+					// Fresh PathDB: EmptyRootHash is the disk layer, recommit is safe
+				}
+
+				if genesis.Config == nil {
+					return nil, common.Hash{}, errGenesisNoConfig
+				}
+
+				log.Info("Genesis state not found, recommitting", "root", header.Root.Hex(), "err", err)
+
+				// Recommit genesis state trie to database
+				block, err := genesis.Commit(db, triedb)
+				if err != nil {
+					return genesis.Config, common.Hash{}, fmt.Errorf("failed to recommit genesis: %w", err)
+				}
+
+				// Verify state is now accessible
+				if _, verifyErr := triedb.NodeReader(header.Root); verifyErr != nil {
+					log.Warn("Genesis state still not accessible after recommit",
+						"expected_root", header.Root.Hex(),
+						"computed_root", block.Root().Hex())
+					if header.Root != block.Root() {
+						return genesis.Config, stored, fmt.Errorf(
+							"genesis alloc mismatch: expected stateRoot %s but got %s (alloc differs from original genesis)",
+							header.Root.Hex(), block.Root().Hex())
+					}
+					return genesis.Config, stored, fmt.Errorf("genesis state not accessible after recommit: %w", verifyErr)
+				}
+
+				log.Info("Successfully recommitted genesis state", "root", header.Root.Hex())
+				return genesis.Config, stored, nil
+			}
+		}
+	}
+	// Check whether the genesis block is already written.
+	// For validation, we just check if the stored block exists and matches basic properties
+	storedBlock := rawdb.ReadBlock(db, stored, 0)
+	if storedBlock == nil {
+		// Genesis hash exists but block doesn't - need to recommit
+		_, err := genesis.Commit(db, triedb)
+		return genesis.Config, stored, err
+	}
+	// The genesis block exists, validate it matches our expectations
+	// We can't recreate the exact hash without the original state, so we trust the stored genesis
+	// Get the existing chain configuration.
+	newcfg := genesis.Config
+	if err := newcfg.CheckConfigForkOrder(); err != nil {
+		return newcfg, common.Hash{}, err
+	}
+	storedcfg := customrawdb.ReadChainConfig(db, stored)
+	// If there is no previously stored chain config, write the chain config to disk.
+	if storedcfg == nil {
+		// Note: this can happen since we did not previously write the genesis block and chain config in the same batch.
+		log.Warn("Found genesis block without chain config")
+		customrawdb.WriteChainConfig(db, stored, newcfg)
+		return newcfg, stored, nil
+	}
+
+	// Notes on the following line:
+	// - this is needed in coreth to handle the case where existing nodes do not
+	//   have the Berlin or London forks initialized by block number on disk.
+	//   See https://github.com/luxfi/coreth/pull/667/files
+	// - this is not needed in evm but it does not impact it either
+	if err := params.SetEthUpgrades(storedcfg); err != nil {
+		return genesis.Config, common.Hash{}, err
+	}
+	// Check config compatibility and write the config. Compatibility errors
+	// are returned to the caller unless we're already at block zero.
+	// we use last accepted block for cfg compatibility check. Note this allows
+	// the node to continue if it previously halted due to attempting to process blocks with
+	// an incorrect chain config.
+	var lastBlock *types.Block
+	if lastAcceptedHash == (common.Hash{}) {
+		// If no last accepted hash provided, use genesis
+		lastBlock = genesis.ToBlock()
+	} else {
+		lastBlock = ReadBlockByHash(db, lastAcceptedHash)
+		// this should never happen, but we check anyway
+		// when we start syncing from scratch, the last accepted block
+		// will be genesis block
+		if lastBlock == nil {
+			// If the lastAcceptedHash is the genesis hash, use the genesis block
+			if lastAcceptedHash == stored {
+				lastBlock = genesis.ToBlock()
+			} else {
+				return newcfg, common.Hash{}, errors.New("missing last accepted block")
+			}
+		}
+	}
+	height := lastBlock.NumberU64()
+	timestamp := lastBlock.Time()
+	if skipChainConfigCheckCompatible {
+		log.Info("skipping verifying activated network upgrades on chain config")
+	} else {
+		compatErr := storedcfg.CheckCompatible(newcfg, height, timestamp)
+		if compatErr != nil && ((height != 0 && compatErr.RewindToBlock != 0) || (timestamp != 0 && compatErr.RewindToTime != 0)) {
+			storedData, _ := params.ToWithUpgradesJSON(storedcfg).MarshalJSON()
+			newData, _ := params.ToWithUpgradesJSON(newcfg).MarshalJSON()
+			log.Error("found mismatch between config on database vs. new config", "storedConfig", string(storedData), "newConfig", string(newData), "err", compatErr)
+			return newcfg, stored, compatErr
+		}
+	}
+	// Required to write the chain config to disk to ensure both the chain config and upgrade bytes are persisted to disk.
+	// Note: this intentionally removes an extra check from upstream.
+	customrawdb.WriteChainConfig(db, stored, newcfg)
+	return newcfg, stored, nil
+}
+
+// IsVerkle indicates whether the state is already stored in a verkle
+// tree at genesis time.
+func (g *Genesis) IsVerkle() bool {
+	return g.Config.IsVerkle(new(big.Int).SetUint64(g.Number), g.Timestamp)
+}
+
+// ToBlock returns the genesis block according to genesis specification.
+func (g *Genesis) ToBlock() *types.Block {
+	db := rawdb.NewMemoryDatabase()
+	return g.toBlock(db, triedb.NewDatabase(db, g.trieConfig()))
+}
+
+func (g *Genesis) trieConfig() *triedb.Config {
+	if !g.IsVerkle() {
+		return nil
+	}
+	return &triedb.Config{
+		IsVerkle: true,
+		PathDB:   pathdb.Defaults,
+	}
+}
+
+// TODO: migrate this function to "flush" for more similarity with upstream.
+func (g *Genesis) toBlock(db ethdb.Database, triedb *triedb.Database) *types.Block {
+	statedb, err := state.New(types.EmptyRootHash, state.NewDatabaseWithNodeDB(db, triedb), nil)
+	if err != nil {
+		panic(err)
+	}
+	if g.AirdropHash != (common.Hash{}) {
+		t := time.Now()
+		h := common.BytesToHash(crypto.Keccak256(g.AirdropData))
+		if g.AirdropHash != h {
+			panic(fmt.Sprintf("expected standard allocation %s but got %s", g.AirdropHash, h))
+		}
+		airdrop := []*Airdrop{}
+		if err := json.Unmarshal(g.AirdropData, &airdrop); err != nil {
+			panic(err)
+		}
+		airdropAmount := uint256.MustFromBig(g.AirdropAmount)
+		for _, alloc := range airdrop {
+			statedb.SetBalance(alloc.Address, airdropAmount, tracing.BalanceIncreaseGenesisBalance)
+		}
+		log.Debug(
+			"applied airdrop allocation",
+			"hash", h, "addrs", len(airdrop), "balance", g.AirdropAmount,
+			"t", time.Since(t),
+		)
+	}
+
+	head := &types.Header{
+		Number:     new(big.Int).SetUint64(g.Number),
+		Nonce:      types.EncodeNonce(g.Nonce),
+		Time:       g.Timestamp,
+		ParentHash: g.ParentHash,
+		Extra:      g.ExtraData,
+		GasLimit:   g.GasLimit,
+		GasUsed:    g.GasUsed,
+		BaseFee:    g.BaseFee,
+		Difficulty: g.Difficulty,
+		MixDigest:  g.Mixhash,
+		Coinbase:   g.Coinbase,
+	}
+
+	// Note: BlockGasCost for genesis will be set after the header is finalized.
+	// This is required for hash-based storage to work correctly.
+
+	// Configure any stateful precompiles that should be enabled in the genesis.
+	blockContext := NewBlockContext(head.Number, head.Time)
+	err = ApplyPrecompileActivations(g.Config, nil, blockContext, statedb)
+	if err != nil {
+		panic(fmt.Sprintf("unable to configure precompiles in genesis block: %v", err))
+	}
+
+	// Do custom allocation after airdrop in case an address shows up in standard
+	// allocation
+	for addr, account := range g.Alloc {
+		statedb.SetBalance(addr, uint256.MustFromBig(account.Balance), tracing.BalanceIncreaseGenesisBalance)
+		_ = statedb.SetCode(addr, account.Code, tracing.CodeChangeGenesis)
+		statedb.SetNonce(addr, account.Nonce, tracing.NonceChangeGenesis)
+		for key, value := range account.Storage {
+			statedb.SetState(addr, key, value)
+		}
+	}
+	head.Root = statedb.IntermediateRoot(false)
+
+	if g.GasLimit == 0 {
+		head.GasLimit = ethparams.GenesisGasLimit
+	}
+	if g.Difficulty == nil {
+		head.Difficulty = ethparams.GenesisDifficulty
+	}
+	if g.ExtraData == nil {
+		head.Extra = []byte{}
+	}
+	var withdrawals []*types.Withdrawal
+	if conf := g.Config; conf != nil {
+		num := new(big.Int).SetUint64(g.Number)
+		confExtra := params.GetExtra(conf)
+		if confExtra.IsEVM(g.Timestamp) {
+			if g.BaseFee != nil {
+				head.BaseFee = g.BaseFee
+			} else {
+				head.BaseFee = new(big.Int).Set(params.GetExtra(g.Config).FeeConfig.MinBaseFee)
+			}
+		}
+
+		// EIP-4895: Set empty withdrawals hash for Shanghai
+		if conf.IsShanghai(num, g.Timestamp) {
+			head.WithdrawalsHash = &types.EmptyWithdrawalsHash
+			withdrawals = make([]*types.Withdrawal, 0)
+		}
+		if conf.IsCancun(num, g.Timestamp) {
+			// EIP-4788: The parentBeaconBlockRoot of the genesis block is always
+			// the zero hash. This is because the genesis block does not have a parent
+			// by definition.
+			head.ParentBeaconRoot = new(common.Hash)
+			// EIP-4844 fields
+			head.ExcessBlobGas = g.ExcessBlobGas
+			head.BlobGasUsed = g.BlobGasUsed
+			if head.ExcessBlobGas == nil {
+				head.ExcessBlobGas = new(uint64)
+			}
+			if head.BlobGasUsed == nil {
+				head.BlobGasUsed = new(uint64)
+			}
+		}
+	}
+
+	// Create the genesis block to use the block hash
+	block := types.NewBlock(head, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil))
+
+	// Set BlockGasCost for genesis block (always 0).
+	// This must be done AFTER NewBlock because NewBlock recomputes
+	// TxHash, ReceiptHash, etc., which changes the header hash.
+	customtypes.SetHeaderExtra(block.Header(), &customtypes.HeaderExtra{
+		BlockGasCost: big.NewInt(0),
+	})
+
+	root, err := statedb.Commit(0, false, false)
+	if err != nil {
+		panic(fmt.Sprintf("unable to commit genesis block to statedb: %v", err))
+	}
+	// Commit newly generated states into disk if it's not empty.
+	if root != types.EmptyRootHash {
+		if err := triedb.Commit(root, true); err != nil {
+			panic(fmt.Sprintf("unable to commit genesis block: %v", err))
+		}
+	}
+	return block
+}
+
+// Commit writes the block and state of a genesis specification to the database.
+// The block is committed as the canonical head block.
+func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Block, error) {
+	block := g.toBlock(db, triedb)
+	if block.Number().Sign() != 0 {
+		return nil, errors.New("can't commit genesis block with number > 0")
+	}
+	config := g.Config
+	if config == nil {
+		return nil, errGenesisNoConfig
+	}
+	if err := config.CheckConfigForkOrder(); err != nil {
+		return nil, err
+	}
+
+	// Marshal and store the genesis allocations for state recovery.
+	// This is critical for block import - when the state trie is missing,
+	// the chain can regenerate it from these stored allocations.
+	blob, err := json.Marshal(g.Alloc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal genesis alloc: %w", err)
+	}
+	rawdb.WriteGenesisStateSpec(db, block.Hash(), blob)
+
+	// Write all necessary database entries for genesis
+	hash := block.Hash()
+	number := block.NumberU64()
+
+	// Write the actual block data with our custom header encoding
+	// that preserves BlockGasCost
+	customrawdb.WriteBlock(db, block)
+	rawdb.WriteReceipts(db, hash, number, nil)
+
+	// Write canonical mappings
+	rawdb.WriteCanonicalHash(db, hash, number)
+	rawdb.WriteHeadBlockHash(db, hash)
+	rawdb.WriteHeadHeaderHash(db, hash)
+
+	// Write chain config
+	customrawdb.WriteChainConfig(db, hash, config)
+
+	// Verify the block can be read back - remove debug code later
+	// canonHash := rawdb.ReadCanonicalHash(db, 0)
+	// log.Info("After write check", "canonical_hash", canonHash, "block_hash", block.Hash(), "match", canonHash == block.Hash())
+
+	return block, nil
+}
+
+// MustCommit writes the genesis block and state to db, panicking on error.
+// The block is committed as the canonical head block.
+func (g *Genesis) MustCommit(db ethdb.Database, triedb *triedb.Database) *types.Block {
+	block, err := g.Commit(db, triedb)
+	if err != nil {
+		panic(err)
+	}
+	return block
+}
+
+func (g *Genesis) Verify() error {
+	// Make sure genesis gas limit is consistent
+	gasLimitConfig := params.GetExtra(g.Config).FeeConfig.GasLimit.Uint64()
+	if gasLimitConfig != g.GasLimit {
+		return fmt.Errorf(
+			"gas limit in fee config (%d) does not match gas limit in header (%d)",
+			gasLimitConfig,
+			g.GasLimit,
+		)
+	}
+	// Verify config
+	if err := params.GetExtra(g.Config).Verify(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GenesisBlockForTesting creates and writes a block in which addr has the given wei balance.
+func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big.Int) *types.Block {
+	g := Genesis{
+		Config:  params.TestChainConfig,
+		Alloc:   GenesisAlloc{addr: {Balance: balance}},
+		BaseFee: big.NewInt(legacy.BaseFee),
+	}
+	return g.MustCommit(db, triedb.NewDatabase(db, triedb.HashDefaults))
+}
+
+// ReadBlockByHash reads the block with the given hash from the database.
+func ReadBlockByHash(db ethdb.Reader, hash common.Hash) *types.Block {
+	blockNumber, found := rawdb.ReadHeaderNumber(db, hash)
+	if !found {
+		return nil
+	}
+	return rawdb.ReadBlock(db, hash, blockNumber)
+}

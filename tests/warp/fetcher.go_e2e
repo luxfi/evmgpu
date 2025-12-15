@@ -1,0 +1,60 @@
+// Copyright (C) 2019-2025, Lux Industries, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package warp
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/luxfi/crypto/bls"
+	warpBackend "github.com/luxfi/evm/warp"
+	"github.com/luxfi/ids"
+	luxWarp "github.com/luxfi/warp"
+	"github.com/luxfi/warp/payload"
+)
+
+type apiFetcher struct {
+	clients map[ids.NodeID]warpBackend.Client
+}
+
+func NewAPIFetcher(clients map[ids.NodeID]warpBackend.Client) *apiFetcher {
+	return &apiFetcher{
+		clients: clients,
+	}
+}
+
+func (f *apiFetcher) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedWarpMessage *luxWarp.UnsignedMessage) (*bls.Signature, error) {
+	client, ok := f.clients[nodeID]
+	if !ok {
+		return nil, fmt.Errorf("no warp client for nodeID: %s", nodeID)
+	}
+	var signatureBytes []byte
+	parsedPayload, err := payload.ParsePayload(unsignedWarpMessage.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse unsigned message payload: %w", err)
+	}
+	switch p := parsedPayload.(type) {
+	case *payload.AddressedCall:
+		msgIDBytes := unsignedWarpMessage.ID()
+		msgID, err := ids.ToID(msgIDBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert message ID: %w", err)
+		}
+		signatureBytes, err = client.GetMessageSignature(ctx, msgID)
+	case *payload.Hash:
+		// Convert []byte to ids.ID
+		var blockID ids.ID
+		copy(blockID[:], p.Hash)
+		signatureBytes, err = client.GetBlockSignature(ctx, blockID)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := bls.SignatureFromBytes(signatureBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse signature from client %s: %w", nodeID, err)
+	}
+	return signature, nil
+}

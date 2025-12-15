@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, master ]
+  pull_request:
+    branches: [ main, develop, master ]
+
+env:
+  GO_VERSION: '1.26.1'
+  GOPRIVATE: github.com/luxfi/*
+  GONOSUMDB: github.com/luxfi/*
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Checkout vm dependency
+      uses: actions/checkout@v4
+      with:
+        repository: luxfi/vm
+        path: vm-dep
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Link vm dependency
+      run: ln -s $GITHUB_WORKSPACE/vm-dep ../vm
+      shell: bash
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Setup CI environment
+      run: ./ci_setup.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install golangci-lint v2
+      run: |
+        go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+
+    - name: Run golangci-lint
+      continue-on-error: true
+      run: golangci-lint run --timeout=10m
+
+    - name: Run go fmt check
+      run: |
+        UNFORMATTED=$(gofmt -l . | grep -v vm-dep || true)
+        if [ -n "$UNFORMATTED" ]; then
+          echo "Please run 'go fmt ./...' to format your code"
+          echo "$UNFORMATTED"
+          exit 1
+        fi
+
+    - name: Run go vet
+      continue-on-error: true
+      run: go vet ./...
+
+    - name: go mod tidy
+      continue-on-error: true
+      run: |
+        go mod tidy
+        git diff --exit-code
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Checkout vm dependency
+      uses: actions/checkout@v4
+      with:
+        repository: luxfi/vm
+        path: vm-dep
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Link vm dependency
+      run: ln -s $GITHUB_WORKSPACE/vm-dep ../vm
+      shell: bash
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Setup CI environment
+      run: ./ci_setup.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Run short tests
+      continue-on-error: true
+      env:
+        CGO_ENABLED: '0'
+      run: |
+        go test -v -short -coverprofile=coverage.out -covermode=atomic ./...
+      timeout-minutes: 15
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Checkout vm dependency
+      uses: actions/checkout@v4
+      with:
+        repository: luxfi/vm
+        path: vm-dep
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Link vm dependency
+      run: ln -s $GITHUB_WORKSPACE/vm-dep ../vm
+      shell: bash
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Setup CI environment
+      run: ./ci_setup.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build EVM
+      run: |
+        go build -v -o build/evm ./cmd/evm
+
+    - name: Build precompilegen
+      run: |
+        go build -v -o build/precompilegen ./cmd/precompilegen
+
+    - name: Build abigen
+      run: |
+        go build -v -o build/abigen ./cmd/abigen
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: evm-${{ matrix.os }}
+        path: build/
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Checkout vm dependency
+      uses: actions/checkout@v4
+      with:
+        repository: luxfi/vm
+        path: vm-dep
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Link vm dependency
+      run: ln -s $GITHUB_WORKSPACE/vm-dep ../vm
+      shell: bash
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Setup CI environment
+      run: ./ci_setup.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install gosec
+      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+    - name: Run gosec
+      run: |
+        # Exclude legacy ethereum code security warnings
+        gosec -fmt json -out gosec-report.json -severity high \
+          -exclude=G103,G104,G107,G108,G112,G114,G115,G204,G301,G302,G304,G306,G404,G602 \
+          ./... || true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-report
+        path: gosec-report.json
