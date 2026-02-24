@@ -281,20 +281,17 @@ func benchWriteChain(b *testing.B, full bool, count uint64) {
 }
 
 func benchReadChain(b *testing.B, full bool, count uint64) {
-	// dir := b.TempDir()
-
-	// For benchmarks, use memory database instead of LevelDB
+	// Use a single in-memory database for both writing and reading.
+	// The original code used LevelDB on disk (write, close, reopen same dir).
+	// With memory DB the data is lost on close, so we keep it open.
 	db := rawdb.NewMemoryDatabase()
 	genesis := &Genesis{Config: params.TestChainConfig}
 	makeChainForBench(db, genesis, full, count)
-	_ = db.Close()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		// For benchmarks, use memory database instead of LevelDB
-		db := rawdb.NewMemoryDatabase()
 		chain, err := NewBlockChain(db, DefaultCacheConfig, genesis, dummy.NewFaker(), vm.Config{}, common.Hash{}, false)
 		if err != nil {
 			b.Fatalf("error creating chain: %v", err)
@@ -302,6 +299,9 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 
 		for n := uint64(0); n < count; n++ {
 			header := chain.GetHeaderByNumber(n)
+			if header == nil {
+				b.Fatalf("missing header at block %d", n)
+			}
 			if full {
 				hash := header.Hash()
 				rawdb.ReadBody(db, hash, n)
@@ -309,6 +309,6 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 			}
 		}
 		chain.Stop()
-		_ = db.Close()
 	}
+	_ = db.Close()
 }
