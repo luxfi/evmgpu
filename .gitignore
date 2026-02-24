@@ -75,3 +75,12 @@ LLM.md
 QWEN.md
 .AGENTS.md
 GEMINI.md
+
+# Local build artifacts (no extension binaries)
+/evm
+/evm.so
+/main
+/awscpu
+
+# Test compiled binaries in repo root
+/*.test
