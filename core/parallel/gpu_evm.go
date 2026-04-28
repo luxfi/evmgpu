@@ -1,13 +1,13 @@
 // Copyright (C) 2026, Lux Industries Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-//go:build gpu
+//go:build gpu && cgo && darwin && arm64
 
 package parallel
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../../../../luxcpp/evm/include -I${SRCDIR}/../../../../../luxcpp/evm/lib/evm/gpu
-#cgo LDFLAGS: -L${SRCDIR}/../../../../../luxcpp/evm/build/lib/evm -levm-gpu -L${SRCDIR}/../../../../../luxcpp/evm/build/lib -levm -lstdc++ -framework Metal -framework Foundation
+#cgo CFLAGS: -I${SRCDIR}/../../../../luxcpp/cevm/include -I${SRCDIR}/../../../../luxcpp/cevm/lib/evm/gpu
+#cgo LDFLAGS: -L${SRCDIR}/../../../../luxcpp/cevm/build/lib/evm -levm-gpu -L${SRCDIR}/../../../../luxcpp/cevm/build/lib -levm -lstdc++ -framework Metal -framework Foundation
 
 #include <stdlib.h>
 #include "go_bridge.h"
