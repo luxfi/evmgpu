@@ -214,6 +214,8 @@ github.com/luxfi/concurrent v0.0.3 h1:eJyv1fhaC0jMLMw6+QS774cUmp7GK+ouMgvLCqnC7c
 github.com/luxfi/concurrent v0.0.3/go.mod h1:Aj/FR5NpM0cB2P4Nt3+tz9+dV6V+LUW4HuMgSjwq5hw=
 github.com/luxfi/consensus v1.22.70 h1:IQlDxkNY2j6W55nYh11WenvdIsZ9g619qo+xS69GA00=
 github.com/luxfi/consensus v1.22.70/go.mod h1:y6y+bVjvpDLkkTBCCKLcch6R4PRW8EA+lTfr+6sB6F8=
+github.com/luxfi/consensus v1.22.86 h1:UOVujTwRup0sMYn3ckeKlFZCBgnX7bdgBa2hRlD4B6M=
+github.com/luxfi/consensus v1.22.86/go.mod h1:HufC4lEizSDbpG6JBzeg5Z1ZSpZi+1/cL4/PrJr4FEI=
 github.com/luxfi/constants v1.4.4 h1:R5MaZkQs70eHceZx+2LS9G2gmG7OcLF98BSkJol3OJE=
 github.com/luxfi/constants v1.4.4/go.mod h1:ENkJ121cmDEkwQPDiKK4QhnTnW9u37PGpepbrdVcAmc=
 github.com/luxfi/container v0.0.4 h1:BXhF82WyfqVP5mjlNcr7tP0Fcnvl0Ap1rkiu+rq5XuM=
@@ -238,6 +240,8 @@ github.com/luxfi/ids v1.2.9 h1:+yjdhXW99drnd2Zlp1u/p8k3G23W3/1btJQ4ogHawUI=
 github.com/luxfi/ids v1.2.9/go.mod h1:khJOEdOPxd22yn0jcVrnbX1ADa0GHn5Y74gvCzN5BYc=
 github.com/luxfi/lattice/v7 v7.0.0 h1:d1vgan6mlb2KtwYfPc1g69uxVYaoVYZmlrIm4aCO88w=
 github.com/luxfi/lattice/v7 v7.0.0/go.mod h1:PFDdOkuGTQ0cbJMbKojzEJMGWUQmZW+wK9/wJ9F9fOs=
+github.com/luxfi/lattice/v7 v7.1.0 h1:mr3HvN6olNTS2LT/xAW/JBhTqfvpsGmsopDMeR7BSJs=
+github.com/luxfi/lattice/v7 v7.1.0/go.mod h1:IaaUN+3ysnBG4BA8ILRYG0j80+qtYDP4C5lkaDb2pDE=
 github.com/luxfi/log v1.4.1 h1:rIfFRodb9jrD/w7KayaUk0Oc+37PaQQdKEEMJCjR8gw=
 github.com/luxfi/log v1.4.1/go.mod h1:64IE3xRMJcpkQwnPUfJw3pDj7wU0kRS7BZ9wM7R72jk=
 github.com/luxfi/math v1.4.0 h1:/sb7Grw3hfO+5INWAWdB95jTvCeXg8fSQxsxDzcFtd4=
@@ -307,6 +311,8 @@ github.com/mitchellh/pointerstructure v1.2.1 h1:ZhBBeX8tSlRpu/FFhXH4RC4OJzFlqsQh
 github.com/mitchellh/pointerstructure v1.2.1/go.mod h1:BRAsLI5zgXmw97Lf6s25bs8ohIXc3tViBH44KcwB2g4=
 github.com/montanaflynn/stats v0.8.2 h1:52wnefTJnPI5FoHif1DQh2soKRw0yYs+4AVyvtcZCH0=
 github.com/montanaflynn/stats v0.8.2/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
+github.com/montanaflynn/stats v0.9.0 h1:tsBJ0RXwph9BmAuFoCmqGv6e8xa0MENQ8m0ptKq29mQ=
+github.com/montanaflynn/stats v0.9.0/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/mr-tron/base58 v1.2.0 h1:T/HDJBh4ZCPbU39/+c3rRvE0uKBQlU27+QI8LJ4t64o=
 github.com/mr-tron/base58 v1.2.0/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
