@@ -1,6 +1,6 @@
 module github.com/luxfi/evmgpu
 
-go 1.26.1
+go 1.26.3
 
 exclude github.com/luxfi/geth v1.16.1
 
@@ -19,7 +19,7 @@ require (
 	github.com/luxfi/codec v1.1.4
 	github.com/luxfi/consensus v1.22.70
 	github.com/luxfi/constants v1.4.4
-	github.com/luxfi/crypto v1.17.44
+	github.com/luxfi/crypto v1.19.0
 	github.com/luxfi/database v1.18.3
 	github.com/luxfi/filesystem v0.0.1
 	github.com/luxfi/geth v1.16.77
