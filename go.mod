@@ -31,7 +31,7 @@ require (
 	github.com/luxfi/math/big v0.1.0
 	github.com/luxfi/math/safe v0.0.1
 	github.com/luxfi/metric v1.5.1
-	github.com/luxfi/p2p v1.19.2
+	github.com/luxfi/p2p v1.21.0
 	github.com/luxfi/precompile v0.4.11
 	github.com/luxfi/runtime v1.0.1
 	github.com/luxfi/sys v0.0.0-20260110090042-50187ec5ffd8
