@@ -31,9 +31,9 @@ jobs:
     needs: create-release
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
@@ -62,9 +62,9 @@ jobs:
     needs: create-release
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
@@ -97,9 +97,9 @@ jobs:
     needs: create-release
     runs-on: macos-13
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
@@ -128,9 +128,9 @@ jobs:
     needs: create-release
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
