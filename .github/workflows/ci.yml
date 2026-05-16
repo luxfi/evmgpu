@@ -16,10 +16,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Checkout vm dependency
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: luxfi/vm
         path: vm-dep
@@ -81,10 +81,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Checkout vm dependency
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: luxfi/vm
         path: vm-dep
@@ -134,10 +134,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Checkout vm dependency
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: luxfi/vm
         path: vm-dep
@@ -187,10 +187,10 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Checkout vm dependency
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: luxfi/vm
         path: vm-dep
