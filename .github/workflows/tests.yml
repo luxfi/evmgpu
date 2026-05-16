@@ -21,9 +21,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
@@ -64,9 +64,9 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-22.04, ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Checkout vm dependency
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: luxfi/vm
           path: vm-dep
@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Git checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up Go
@@ -168,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Git checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up Go
@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Git checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Set up Go
@@ -238,7 +238,7 @@ jobs:
     if: ${{ false }}  # Disabled: requires node docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install qemu (required for cross-platform builds)
         run: |
           sudo apt update
