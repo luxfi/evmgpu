@@ -217,12 +217,12 @@ func TestVMUpgradeBytesPrecompile(t *testing.T) {
 }
 
 func TestNetworkUpgradesOverriden(t *testing.T) {
-	// Use genesisJSONSubnetEVM which has SubnetEVMTimestamp=0 (required by validation)
-	// Note: SubnetEVMTimestamp must always be 0, so we can't override it to non-zero
+	// Use genesisJSONSubnetEVM which has EVMTimestamp=0 (required by validation)
+	// Note: EVMTimestamp must always be 0, so we can't override it to non-zero
 	// This test now focuses on overriding DurangoTimestamp which IS allowed
 	genesisBytes := []byte(genesisJSONSubnetEVM)
 
-	// Only override DurangoTimestamp - SubnetEVMTimestamp must stay at 0
+	// Only override DurangoTimestamp - EVMTimestamp must stay at 0
 	upgradeBytesJSON := `{
 			"networkUpgradeOverrides": {
 				"durangoTimestamp": 1607144402
