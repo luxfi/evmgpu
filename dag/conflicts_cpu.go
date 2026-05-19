@@ -1,8 +1,6 @@
 // Copyright (C) 2025-2026, Lux Industries Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-//go:build !cgo || nogpu
-
 package dag
 
 // conflictsImpl is the CPU fallback for bitmap intersection conflict detection.
@@ -29,8 +27,8 @@ func conflictsImpl(aWrite, aRead, bWrite, bRead *StorageKeySet) bool {
 }
 
 // BatchConflicts returns the pairwise conflict adjacency matrix for a slice
-// of vertices. CPU path uses native Go popcount; GPU build tag provides a
-// parallel implementation that dispatches to Metal/CUDA when available.
+// of vertices using native Go popcount. GPU bitmap intersection is provided
+// by luxcpp kernels and reached through a cgo bridge, not implemented here.
 func BatchConflicts(vertices []*EVMVertex) [][]bool {
 	n := len(vertices)
 	result := make([][]bool, n)

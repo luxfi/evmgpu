@@ -20,7 +20,9 @@ type keccakState interface {
 }
 
 // Hasher computes Keccak-256 hashes for trie node batches.
-// Implementations: GPUHasher (Metal/CUDA, gpu build tag) and cpuHasher (fallback).
+// The CPU implementation is the only one in Go; GPU keccak lives in
+// luxcpp (Metal/CUDA kernels) and is reached through the luxgpu cgo bridge,
+// not through a Go-native hasher.
 type Hasher interface {
 	// BatchHash computes Keccak-256 hashes for a batch of inputs.
 	// Returns one hash per input, in the same order.
