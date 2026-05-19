@@ -39,7 +39,7 @@ require (
 	github.com/luxfi/trace v0.1.4
 	github.com/luxfi/upgrade v1.0.0
 	github.com/luxfi/utils v1.1.4
-	github.com/luxfi/validators v1.0.0
+	github.com/luxfi/validators v1.2.0
 	github.com/luxfi/version v1.0.1
 	github.com/luxfi/vm v1.0.40
 	github.com/luxfi/warp v1.18.5
