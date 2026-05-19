@@ -36,8 +36,8 @@ import (
 //	Phase 4: EVM opcode interpreter as GPU kernel (GPUEVM)
 type Engine struct {
 	concurrency int
-	UseGPU      bool      // When true, use GPUHasher for state root hashing
-	hasher      Hasher    // GPU or CPU batch hasher for trie node hashing
+	UseGPU      bool      // When true, GPU dispatch paths (e.g. cgo bridge to luxcpp) are enabled where available
+	hasher      Hasher    // Trie-node batch hasher (CPU; GPU keccak lives in luxcpp)
 	gpuEVM      GPUDispatcher // GPU EVM opcode dispatch (nil = CPU only)
 	stats       Stats
 }
