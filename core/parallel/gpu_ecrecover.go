@@ -173,10 +173,13 @@ func PreRecoverSenders(signer types.Signer, txs types.Transactions) (*SenderCach
 }
 
 // WithGPUEcrecover returns an EngineOption that enables GPU-accelerated
-// sender recovery before block execution.
+// sender recovery before block execution. Sender recovery itself dispatches
+// to the luxgpu cgo bridge (which calls the C++ Metal/CUDA kernel); the
+// trie-node hasher stays on CPU because there is no Go-native GPU keccak
+// entry point.
 func WithGPUEcrecover() EngineOption {
 	return func(e *Engine) {
 		e.UseGPU = true
-		e.hasher = NewGPUHasher()
+		// e.hasher left as the default CPU hasher.
 	}
 }
