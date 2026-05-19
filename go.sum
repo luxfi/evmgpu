@@ -252,6 +252,8 @@ github.com/luxfi/math/safe v0.0.1 h1:GfSBINV9mOFgHzd32JbgfHSLhlNn0BwnP43rteYEosc
 github.com/luxfi/math/safe v0.0.1/go.mod h1:EejrmOJHh03YAD8+Zww8cPcMR1K3Q2I7w1dX4sMloeo=
 github.com/luxfi/metric v1.5.1 h1:6tVarXMnNR3Xzud8FYUHjtXabTll3HI/OEqG0tgLAcI=
 github.com/luxfi/metric v1.5.1/go.mod h1:PkD4D4JoGuyKtfUkqPNYkrg9xKrJeNVZFdW/5XvAe/A=
+github.com/luxfi/metric v1.5.3 h1:0KW2/w7oA3y2zF9T/teTQJD0n8G3PHPrn5g0WDnZOIY=
+github.com/luxfi/metric v1.5.3/go.mod h1:CMguEhyuLi4YUWyXimJ+UHply99BDFrL0pxedB7rBqM=
 github.com/luxfi/mock v0.1.1 h1:0HEtIjg1J6CWz+IUyP6rsGqNWTcmxjFnSQIhaDuARwY=
 github.com/luxfi/mock v0.1.1/go.mod h1:jo35akl3Vtd8LbzDts8VJ0jmSVycrd1/eBi6g6t5hKU=
 github.com/luxfi/node v1.23.4 h1:NzARkjbFUtlHyMEqSFQ0VeQRKF5eGWWwfQA7PO4f9VQ=
