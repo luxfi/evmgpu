@@ -17,7 +17,7 @@ require (
 	github.com/holiman/uint256 v1.3.2
 	github.com/luxfi/cache v1.2.1
 	github.com/luxfi/codec v1.1.4
-	github.com/luxfi/consensus v1.22.70
+	github.com/luxfi/consensus v1.23.29
 	github.com/luxfi/constants v1.5.3
 	github.com/luxfi/crypto v1.19.0
 	github.com/luxfi/database v1.18.3
@@ -86,15 +86,16 @@ require (
 	github.com/luxfi/age v1.4.0 // indirect
 	github.com/luxfi/api v1.0.4 // indirect
 	github.com/luxfi/atomic v1.0.0 // indirect
+	github.com/luxfi/bft v0.1.5 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/fhe v1.7.6 // indirect
-	github.com/luxfi/lattice/v7 v7.0.0 // indirect
+	github.com/luxfi/lattice/v7 v7.1.0 // indirect
 	github.com/luxfi/node v1.23.4 // indirect
 	github.com/luxfi/protocol v0.0.2 // indirect
 	github.com/luxfi/resource v0.0.1 // indirect
-	github.com/luxfi/threshold v1.5.5 // indirect
+	github.com/luxfi/threshold v1.6.17 // indirect
 	github.com/luxfi/zapdb v1.8.0 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
@@ -160,7 +161,7 @@ require (
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/pointerstructure v1.2.1 // indirect
-	github.com/montanaflynn/stats v0.8.2 // indirect
+	github.com/montanaflynn/stats v0.9.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
