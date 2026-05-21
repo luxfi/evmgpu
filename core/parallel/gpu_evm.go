@@ -5,6 +5,13 @@
 
 package parallel
 
+// Consumes libevm-gpu and libevm from the luxcpp/cevm CMake build tree.
+// These libs are not in the canonical luxcpp/install pkgconfig set; the
+// ${SRCDIR}-relative path below assumes the standard dev layout
+// $HOME/work/luxcpp parallel to $HOME/work/lux. Once libevm-gpu lands in
+// $LUXCPP_PREFIX with a .pc file (lux-cevm.pc), this block should switch
+// to `#cgo pkg-config: lux-cevm` and drop the relative path.
+
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../../../luxcpp/cevm/include -I${SRCDIR}/../../../../luxcpp/cevm/lib/evm/gpu
 #cgo LDFLAGS: -L${SRCDIR}/../../../../luxcpp/cevm/build/lib/evm -levm-gpu -L${SRCDIR}/../../../../luxcpp/cevm/build/lib -levm -lstdc++ -framework Metal -framework Foundation
