@@ -128,8 +128,8 @@ var (
 		if configMap, ok := jsonMap["config"].(map[string]interface{}); ok {
 			if extra := params.GetExtra(&cpy); extra != nil {
 				// Add the network upgrade timestamps
-				if extra.SubnetEVMTimestamp != nil {
-					configMap["subnetEVMTimestamp"] = *extra.SubnetEVMTimestamp
+				if extra.EVMTimestamp != nil {
+					configMap["evmTimestamp"] = *extra.EVMTimestamp
 				}
 				if extra.DurangoTimestamp != nil {
 					configMap["durangoTimestamp"] = *extra.DurangoTimestamp
@@ -184,8 +184,8 @@ var (
 		if configMap, ok := jsonMap["config"].(map[string]interface{}); ok {
 			if extra := params.GetExtra(genesis.Config); extra != nil {
 				// Add the network upgrade timestamps
-				if extra.SubnetEVMTimestamp != nil {
-					configMap["subnetEVMTimestamp"] = *extra.SubnetEVMTimestamp
+				if extra.EVMTimestamp != nil {
+					configMap["evmTimestamp"] = *extra.EVMTimestamp
 				}
 				if extra.DurangoTimestamp != nil {
 					configMap["durangoTimestamp"] = *extra.DurangoTimestamp
@@ -2648,7 +2648,7 @@ func testBuildAllowListActivationBlock(t *testing.T, scheme string) {
 	}
 	extra := params.GetExtra(genesis.Config)
 	// Set required timestamps that aren't preserved during JSON unmarshalling
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	extra.GenesisPrecompiles = extras.Precompiles{
 		deployerallowlist.ConfigKey: deployerallowlist.NewConfig(utils.TimeToNewUint64(time.Now()), testEthAddrs, nil, nil),
@@ -2971,7 +2971,7 @@ func TestTxAllowListDisablePrecompile(t *testing.T) {
 		t.Fatal(err)
 	}
 	extra := params.GetExtra(genesis.Config)
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	enableAllowListTimestamp := time.Unix(0, 0) // enable at genesis
 	extra.GenesisPrecompiles = extras.Precompiles{
@@ -3101,7 +3101,7 @@ func TestFeeManagerChangeFee(t *testing.T) {
 		t.Fatal(err)
 	}
 	configExtra := params.GetExtra(genesis.Config)
-	configExtra.SubnetEVMTimestamp = utils.NewUint64(0)
+	configExtra.EVMTimestamp = utils.NewUint64(0)
 	configExtra.DurangoTimestamp = utils.NewUint64(0)
 	configExtra.GenesisPrecompiles = extras.Precompiles{
 		feemanager.ConfigKey: feemanager.NewConfig(utils.NewUint64(0), testEthAddrs[0:1], nil, nil, nil),
@@ -3245,7 +3245,7 @@ func testAllowFeeRecipientDisabled(t *testing.T, scheme string) {
 		t.Fatal(err)
 	}
 	extra := params.GetExtra(genesis.Config)
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	extra.AllowFeeRecipients = false // set to false initially
 	genesisJSON := []byte(marshalGenesisWithExtras(genesis))
@@ -3329,7 +3329,7 @@ func TestAllowFeeRecipientEnabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	extra := params.GetExtra(genesis.Config)
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	extra.AllowFeeRecipients = true
 	genesisJSON := []byte(marshalGenesisWithExtras(genesis))
@@ -3397,7 +3397,7 @@ func TestRewardManagerPrecompileSetRewardAddress(t *testing.T) {
 	require.NoError(t, genesis.UnmarshalJSON([]byte(genesisJSONSubnetEVM)))
 
 	extra := params.GetExtra(genesis.Config)
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	extra.GenesisPrecompiles = extras.Precompiles{
 		rewardmanager.ConfigKey: rewardmanager.NewConfig(utils.NewUint64(0), testEthAddrs[0:1], nil, nil, nil),
@@ -3568,7 +3568,7 @@ func TestRewardManagerPrecompileAllowFeeRecipients(t *testing.T) {
 	require.NoError(t, genesis.UnmarshalJSON([]byte(genesisJSONSubnetEVM)))
 
 	extra := params.GetExtra(genesis.Config)
-	extra.SubnetEVMTimestamp = utils.NewUint64(0)
+	extra.EVMTimestamp = utils.NewUint64(0)
 	extra.DurangoTimestamp = utils.NewUint64(0)
 	extra.GenesisPrecompiles = extras.Precompiles{
 		rewardmanager.ConfigKey: rewardmanager.NewConfig(utils.NewUint64(0), testEthAddrs[0:1], nil, nil, nil),
@@ -3727,7 +3727,7 @@ func TestRewardManagerPrecompileAllowFeeRecipients(t *testing.T) {
 func TestSkipChainConfigCheckCompatible(t *testing.T) {
 	// The most recent network upgrade in Subnet-EVM is SubnetEVM itself, which cannot be disabled for this test since it results in
 	// disabling dynamic fees and causes a panic since some code assumes that this is enabled.
-	// NOTE: SubnetEVMTimestamp must be 0 (activated at genesis), so we use genesisJSONSubnetEVM
+	// NOTE: EVMTimestamp must be 0 (activated at genesis), so we use genesisJSONSubnetEVM
 
 	tvm := newVM(t, testVMConfig{
 		genesisJSON: genesisJSONSubnetEVM,
@@ -4028,7 +4028,7 @@ func TestFeeManagerRegressionMempoolMinFeeAfterRestart(t *testing.T) {
 	}
 	precompileActivationTime := utils.NewUint64(genesis.Timestamp + 5) // 5 seconds after genesis
 	configExtra := params.GetExtra(genesis.Config)
-	configExtra.SubnetEVMTimestamp = utils.NewUint64(0)
+	configExtra.EVMTimestamp = utils.NewUint64(0)
 	configExtra.DurangoTimestamp = utils.NewUint64(0)
 	configExtra.GenesisPrecompiles = extras.Precompiles{
 		feemanager.ConfigKey: feemanager.NewConfig(precompileActivationTime, testEthAddrs[0:1], nil, nil, nil),
