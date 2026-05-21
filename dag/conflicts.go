@@ -11,8 +11,9 @@ package dag
 //   - a.ReadSet intersects b.WriteSet  (read-write / WAR hazard)
 //   - a.WriteSet intersects b.WriteSet (write-write / WAW hazard)
 //
-// This function dispatches to GPU bitmap intersection when available
-// (conflicts_gpu.go), falling back to CPU popcount (conflicts_cpu.go).
+// Implementation lives in conflicts_cpu.go (Go popcount); GPU bitmap
+// intersection lives in luxcpp kernels and is reached through the luxgpu
+// cgo bridge from a higher-level dispatcher, not from Go.
 func Conflicts(a, b *EVMVertex) bool {
 	if a == nil || b == nil {
 		return false

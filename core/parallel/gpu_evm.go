@@ -143,10 +143,15 @@ func gpuBackendName(b uint8) string {
 
 // WithGPUOpcodes returns an EngineOption that enables GPU EVM opcode dispatch
 // for eligible transactions. Requires the gpu build tag and luxcpp/evm.
+//
+// Trie-node hashing stays on the CPU hasher: GPU keccak dispatch belongs in
+// luxcpp (Metal/CUDA kernels) and is not implemented in Go. Once
+// luxcpp/gpu exposes a batch keccak entry point, the dispatcher can be
+// wired through the existing luxgpu cgo bridge in lux/gpu.
 func WithGPUOpcodes() EngineOption {
 	return func(e *Engine) {
 		e.gpuEVM = NewGPUEVMDispatcher()
 		e.UseGPU = true
-		e.hasher = NewGPUHasher()
+		// e.hasher left as the default CPU hasher.
 	}
 }
