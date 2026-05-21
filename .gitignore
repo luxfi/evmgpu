@@ -84,3 +84,4 @@ GEMINI.md
 
 # Test compiled binaries in repo root
 /*.test
+.!*
