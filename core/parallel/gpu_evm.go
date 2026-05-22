@@ -5,16 +5,22 @@
 
 package parallel
 
-// Consumes libevm-gpu and libevm from the luxcpp/cevm CMake build tree.
-// These libs are not in the canonical luxcpp/install pkgconfig set; the
-// ${SRCDIR}-relative path below assumes the standard dev layout
-// $HOME/work/luxcpp parallel to $HOME/work/lux. Once libevm-gpu lands in
-// $LUXCPP_PREFIX with a .pc file (lux-cevm.pc), this block should switch
-// to `#cgo pkg-config: lux-cevm` and drop the relative path.
+// Linkage goes through the lux-cevm pkg-config bundle (libevm + libevm-gpu).
+// The C header "go_bridge.h" ships under
+// $LUXCPP_PREFIX/include/cevm/lib/evm/gpu/, which is in the .pc Cflags.
+//
+// Build + install once with:
+//
+//   cmake -S ~/work/luxcpp/cevm -B ~/work/luxcpp/cevm/build \
+//         -DCMAKE_INSTALL_PREFIX=$HOME/work/luxcpp/install
+//   cmake --build ~/work/luxcpp/cevm/build
+//   cmake --install ~/work/luxcpp/cevm/build
+//
+// Then `export PKG_CONFIG_PATH=$HOME/work/luxcpp/install/lib/pkgconfig`.
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../../../luxcpp/cevm/include -I${SRCDIR}/../../../../luxcpp/cevm/lib/evm/gpu
-#cgo LDFLAGS: -L${SRCDIR}/../../../../luxcpp/cevm/build/lib/evm -levm-gpu -L${SRCDIR}/../../../../luxcpp/cevm/build/lib -levm -lstdc++ -framework Metal -framework Foundation
+#cgo pkg-config: lux-cevm
+#cgo darwin LDFLAGS: -framework Metal -framework Foundation -lstdc++
 
 #include <stdlib.h>
 #include "go_bridge.h"
