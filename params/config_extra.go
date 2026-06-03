@@ -63,7 +63,7 @@ func getPrecompileAddress(config precompileconfig.Config) common.Address {
 type RulesExtra struct {
 	IsEVM     bool
 	IsDurango bool
-	IsEtna    bool
+	IsQuasar  bool
 	IsFortuna bool
 	IsGranite bool
 
@@ -133,8 +133,8 @@ func SetEthUpgrades(c *ChainConfig) error {
 		c.ShanghaiTime = utils.NewUint64(*durango)
 	}
 
-	if etna := extra.EtnaTimestamp; etna != nil && *etna < unscheduledActivation {
-		c.CancunTime = utils.NewUint64(*etna)
+	if quasar := extra.QuasarTimestamp; quasar != nil && *quasar < unscheduledActivation {
+		c.CancunTime = utils.NewUint64(*quasar)
 		// Cancun requires BlobScheduleConfig for CalcExcessBlobGas in block building.
 		// Without this, latestBlobConfig() returns nil causing a nil pointer panic.
 		if c.BlobScheduleConfig == nil {
@@ -326,7 +326,7 @@ func GetRulesExtra(rules Rules) RulesExtra {
 		rulesExtra := RulesExtra{
 			IsEVM:            true,
 			IsDurango:        true,
-			IsEtna:           true,
+			IsQuasar:         true,
 			IsFortuna:        true,
 			IsGranite:        true,
 			PredicatersExist: false,
@@ -335,7 +335,7 @@ func GetRulesExtra(rules Rules) RulesExtra {
 		rulesExtra.LuxRules = extras.LuxRules{
 			IsEVM:     true,
 			IsDurango: true,
-			IsEtna:    true,
+			IsQuasar:  true,
 			IsFortuna: true,
 			IsGranite: true,
 		}
@@ -350,7 +350,7 @@ func GetRulesExtra(rules Rules) RulesExtra {
 	rulesExtra := RulesExtra{
 		IsEVM:             extrasRules.IsEVM,
 		IsDurango:         extrasRules.IsDurango,
-		IsEtna:            extrasRules.IsEtna,
+		IsQuasar:          extrasRules.IsQuasar,
 		IsFortuna:         extrasRules.IsFortuna,
 		IsGranite:         extrasRules.IsGranite,
 		PredicatersExist:  len(extrasRules.Predicaters) > 0,
