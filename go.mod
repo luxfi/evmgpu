@@ -20,7 +20,7 @@ require (
 	github.com/luxfi/consensus v1.25.14
 	github.com/luxfi/constants v1.5.8-0.20260603055356-93c2c2ceb9ca
 	github.com/luxfi/crypto v1.19.10
-	github.com/luxfi/database v1.18.3
+	github.com/luxfi/database v1.19.0
 	github.com/luxfi/filesystem v0.0.1
 	github.com/luxfi/geth v1.16.98
 	github.com/luxfi/go-bip39 v1.1.2
