@@ -6,7 +6,6 @@ package evm
 import (
 	"context"
 
-	"github.com/luxfi/codec"
 	"github.com/luxfi/evmgpu/plugin/evm/message"
 	syncHandlers "github.com/luxfi/evmgpu/sync/handlers"
 	syncStats "github.com/luxfi/evmgpu/sync/handlers/stats"
@@ -31,7 +30,7 @@ func newNetworkHandler(
 	diskDB ethdb.KeyValueReader,
 	evmTrieDB *triedb.Database,
 	warpBackend warp.Backend,
-	networkCodec codec.Manager,
+	networkCodec message.Manager,
 ) message.RequestHandler {
 	syncStats := syncStats.NewHandlerStats(metrics.Enabled())
 	return &networkHandler{
