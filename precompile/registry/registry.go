@@ -54,6 +54,8 @@ import (
 	// AI Mining (0x0300-0x03FF)
 	// ============================================
 	_ "github.com/luxfi/precompile/ai" // AI mining rewards, TEE verification
+	_ "github.com/luxfi/precompile/inference"     // 0x0300..03 deterministic int8 inference (Tier-1)
+	_ "github.com/luxfi/precompile/modelregistry" // ModelSpec registry
 
 	// ============================================
 	// DEX (LP-9xxx) - QuantumSwap Native DEX
