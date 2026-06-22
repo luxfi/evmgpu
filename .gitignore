@@ -58,7 +58,10 @@ dist/
 .tmp
 
 
-runtime
+# Root-level `runtime` build artifact only. Anchored to repo root so it does
+# NOT swallow source packages like core/vm/runtime/ (an unanchored `runtime`
+# pattern silently excluded that package, breaking cmd/evm's import of it).
+/runtime
 
 # LLM documentation files (symlinked)
 CLAUDE.md
