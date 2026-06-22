@@ -1,7 +1,7 @@
 // Copyright (C) 2026, Lux Industries Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-//go:build cgo && darwin && arm64
+//go:build gpu && cgo && darwin && arm64
 
 package parallel
 
