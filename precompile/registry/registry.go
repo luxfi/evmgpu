@@ -20,7 +20,6 @@ import (
 	// ============================================
 	_ "github.com/luxfi/precompile/mldsa"    // ML-DSA signature verification (FIPS 204)
 	_ "github.com/luxfi/precompile/mlkem"    // ML-KEM key encapsulation (FIPS 203)
-	_ "github.com/luxfi/precompile/pqcrypto" // Unified PQ crypto operations
 	_ "github.com/luxfi/precompile/slhdsa"   // SLH-DSA stateless hash signatures (FIPS 205)
 
 	// ============================================

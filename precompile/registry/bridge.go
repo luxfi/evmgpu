@@ -229,6 +229,21 @@ func (s *stateDBBridge) Logs() []*ethtypes.Log {
 	return nil
 }
 
+// GetCodeSize forwards the EXTCODESIZE primitive (the C1 live-on-chain asset proof the
+// 0x9999 DEX value path's OnChainAssetVerifier reads) to the internal contract.StateDB via
+// the same optional-capability type assertion used for SubBalance. In production s.internal
+// is the concrete stateDBAdapter{vm.StateDB}, which implements GetCodeSize. Returns -1 when
+// the internal StateDB cannot report code size, so the value path fails CLOSED
+// (ErrNoOnChainVerifier) rather than admitting an asset on a fabricated zero code size.
+func (s *stateDBBridge) GetCodeSize(addr common.Address) int {
+	if cs, ok := s.internal.(interface {
+		GetCodeSize(common.Address) int
+	}); ok {
+		return cs.GetCodeSize(addr)
+	}
+	return -1
+}
+
 func (s *stateDBBridge) GetPredicateStorageSlots(addr common.Address, index int) ([]byte, bool) {
 	return s.internal.GetPredicateStorageSlots(addr, index)
 }
