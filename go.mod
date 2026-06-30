@@ -110,7 +110,6 @@ require (
 	github.com/luxfi/api v1.0.12 // indirect
 	github.com/luxfi/atomic v1.0.0 // indirect
 	github.com/luxfi/bft v0.1.5 // indirect
-	github.com/luxfi/codec v1.1.4 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
 	github.com/luxfi/container v0.0.4 // indirect
@@ -122,7 +121,6 @@ require (
 	github.com/luxfi/mlwe v0.2.1 // indirect
 	github.com/luxfi/pq v1.0.3 // indirect
 	github.com/luxfi/proto v1.3.4 // indirect
-	github.com/luxfi/pulsar v1.8.0 // indirect
 	github.com/luxfi/resource v0.0.1 // indirect
 	github.com/luxfi/rpc v1.1.0 // indirect
 	github.com/luxfi/threshold v1.10.2 // indirect
@@ -241,7 +239,3 @@ exclude (
 	github.com/luxfi/precompiles v0.1.10
 	github.com/luxfi/precompiles v0.1.11
 )
-
-replace github.com/luxfi/constants => github.com/luxfi/constants v1.5.8
-
-replace github.com/luxfi/upgrade => github.com/luxfi/upgrade v1.0.2
