@@ -19,7 +19,7 @@ env:
 jobs:
   lint_test:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: lux-build-amd64
     steps:
       - uses: actions/checkout@v6
       - name: Checkout vm dependency
@@ -123,7 +123,7 @@ jobs:
   e2e_precompile:
     name: e2e precompile tests
     if: ${{ false }}  # Disabled: requires pre-built node binaries
-    runs-on: ubuntu-latest
+    runs-on: lux-build-amd64
     steps:
       - name: Git checkout
         uses: actions/checkout@v6
@@ -165,7 +165,7 @@ jobs:
   e2e_warp:
     name: e2e warp tests
     if: ${{ false }}  # Disabled: requires pre-built node binaries
-    runs-on: ubuntu-latest
+    runs-on: lux-build-amd64
     steps:
       - name: Git checkout
         uses: actions/checkout@v6
@@ -207,7 +207,7 @@ jobs:
   e2e_load:
     name: e2e load tests
     if: ${{ false }}  # Disabled: requires pre-built node binaries
-    runs-on: ubuntu-latest
+    runs-on: lux-build-amd64
     steps:
       - name: Git checkout
         uses: actions/checkout@v6
@@ -236,7 +236,7 @@ jobs:
   test_build_image:
     name: Image build
     if: ${{ false }}  # Disabled: requires node docker image
-    runs-on: ubuntu-latest
+    runs-on: lux-build-amd64
     steps:
       - uses: actions/checkout@v6
       - name: Install qemu (required for cross-platform builds)
