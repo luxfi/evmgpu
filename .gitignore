@@ -61,12 +61,10 @@ dist/
 runtime
 
 # LLM documentation files (symlinked)
-CLAUDE.md
 AGENTS.md
 GEMINI.md
 
 # LLM documentation files (ignored, not committed)
-CLAUDE.md
 AGENTS.md
 GEMINI.md
 QWEN.md
