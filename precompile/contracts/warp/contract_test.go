@@ -17,7 +17,7 @@ import (
 	"github.com/luxfi/geth/core/vm"
 	"github.com/luxfi/ids"
 	"github.com/luxfi/math/set"
-	"github.com/luxfi/runtime"
+	context "github.com/luxfi/runtime"
 	agoUtils "github.com/luxfi/utils"
 	"github.com/luxfi/warp"
 	"github.com/luxfi/warp/payload"

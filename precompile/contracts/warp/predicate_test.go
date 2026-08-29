@@ -203,16 +203,8 @@ func (t *testValidatorStateWrapper) GetMinimumHeight(ctx context.Context) (uint6
 	return 0, nil
 }
 
-func (t *testValidatorStateWrapper) GetValidatorSet(height uint64, chainID ids.ID) (map[ids.NodeID]uint64, error) {
-	validatorOutputs, err := t.State.GetValidatorSet(context.Background(), height, chainID)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[ids.NodeID]uint64, len(validatorOutputs))
-	for nodeID, output := range validatorOutputs {
-		result[nodeID] = output.Weight
-	}
-	return result, nil
+func (t *testValidatorStateWrapper) GetValidatorSet(ctx context.Context, height uint64, chainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+	return t.State.GetValidatorSet(ctx, height, chainID)
 }
 
 // GetValidatorSetWithOutput returns the full validator output including public keys
@@ -274,7 +266,7 @@ func createValidPredicateTest(consensusCtx context.Context, numKeys uint64, pred
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -331,14 +323,11 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 
 	predicateBytes := predicate.PackPredicate(warpMsg.Bytes())
 
-	consensusCtx := utilstest.NewTestConsensusContext(t)
 	chainID := ids.GenerateTestID()
-	// Use consensus helper functions to add values to context
-	consensusCtx = consensuscontext.WithIDs(consensusCtx, consensuscontext.IDs{
-		NetworkID: 1,
-		ChainID:   chainID,
-	})
-	// Also set chainID via evmconsensus for GetChainID
+	// The runtime carries NetworkID/ChainID for consensuscontext.Get{Chain,Network}ID.
+	consensusCtx := utilstest.NewTestConsensusContextWithChainID(t, chainID)
+	// The predicate path reads the chain ID through evmconsensus, which keys the
+	// context separately from the runtime.
 	consensusCtx = evmconsensus.WithChainID(consensusCtx, chainID)
 
 	state := &validatorstest.State{
@@ -367,7 +356,7 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 		Config: NewConfig(utils.NewUint64(0), 0, requirePrimaryNetworkSigners),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -397,7 +386,7 @@ func TestInvalidPredicatePacking(t *testing.T) {
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -428,7 +417,7 @@ func TestInvalidWarpMessage(t *testing.T) {
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -474,7 +463,7 @@ func TestInvalidAddressedPayload(t *testing.T) {
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -518,7 +507,7 @@ func TestInvalidBitSet(t *testing.T) {
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{
 			ConsensusCtx: consensusCtx,
-			ProposerVMBlockCtx: &block.Context{
+			ProposerVMBlockCtx: &chain.Context{
 				PChainHeight: 1,
 			},
 		},
@@ -563,7 +552,7 @@ func TestWarpSignatureWeightsDefaultQuorumNumerator(t *testing.T) {
 			Config: NewDefaultConfig(utils.NewUint64(0)),
 			PredicateContext: &precompileconfig.PredicateContext{
 				ConsensusCtx: consensusCtx,
-				ProposerVMBlockCtx: &block.Context{
+				ProposerVMBlockCtx: &chain.Context{
 					PChainHeight: 1,
 				},
 			},
@@ -621,7 +610,7 @@ func TestWarpMultiplePredicates(t *testing.T) {
 				Config: NewDefaultConfig(utils.NewUint64(0)),
 				PredicateContext: &precompileconfig.PredicateContext{
 					ConsensusCtx: consensusCtx,
-					ProposerVMBlockCtx: &block.Context{
+					ProposerVMBlockCtx: &chain.Context{
 						PChainHeight: 1,
 					},
 				},
@@ -665,7 +654,7 @@ func TestWarpSignatureWeightsNonDefaultQuorumNumerator(t *testing.T) {
 			Config: NewConfig(utils.NewUint64(0), uint64(nonDefaultQuorumNumerator), false),
 			PredicateContext: &precompileconfig.PredicateContext{
 				ConsensusCtx: consensusCtx,
-				ProposerVMBlockCtx: &block.Context{
+				ProposerVMBlockCtx: &chain.Context{
 					PChainHeight: 1,
 				},
 			},
