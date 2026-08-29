@@ -207,12 +207,6 @@ func (t *testValidatorStateWrapper) GetValidatorSet(ctx context.Context, height 
 	return t.State.GetValidatorSet(ctx, height, chainID)
 }
 
-// GetValidatorSetWithOutput returns the full validator output including public keys
-// This implements the ValidatorOutputGetter interface used by VerifyPredicate
-func (t *testValidatorStateWrapper) GetValidatorSetWithOutput(ctx context.Context, height uint64, chainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
-	return t.State.GetValidatorSet(ctx, height, chainID)
-}
-
 func (t *testValidatorStateWrapper) GetChainID(id ids.ID) (ids.ID, error) {
 	if t.GetChainIDF != nil {
 		return t.GetChainIDF(id)
