@@ -71,6 +71,13 @@ func NewEngine(concurrency int, opts ...EngineOption) *Engine {
 //   - vmFactory: function to create an EVM instance for a transaction
 //
 // Returns receipts in original transaction order.
+//
+// ExecuteBlock does not write to canonical state, and cannot: it reads through
+// stateGetter and executes against whatever vmFactory hands it. Receipts alone
+// therefore say nothing about the state root -- a caller that finalizes on them
+// without routing the write sets back commits the pre-block state under a block
+// full of transactions. The write sets are not returned here yet, which is why
+// ApplyToState has no caller. See TestExecuteBlockDoesNotTouchCanonicalState.
 func (e *Engine) ExecuteBlock(
 	config *ethparams.ChainConfig,
 	header *types.Header,
