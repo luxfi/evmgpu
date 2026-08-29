@@ -660,7 +660,11 @@ func TestPrecompileBind(t *testing.T) {
 					}
 				case ModuleFileName:
 					// change address to a suitable one for testing
-					file.Content = strings.Replace(file.Content, `common.HexToAddress("{ASUITABLEHEXADDRESS}")`, `common.HexToAddress("0x03000000000000000000000000000000000000ff")`, 1)
+					// Top of the LP-aligned reserved range (0x10000-0x1ffff) that
+					// modules.RegisterModule accepts, and above every precompile
+					// this repo registers, so generated modules load without
+					// colliding.
+					file.Content = strings.Replace(file.Content, `common.HexToAddress("{ASUITABLEHEXADDRESS}")`, `common.HexToAddress("0x000000000000000000000000000000000001ffff")`, 1)
 				}
 				if err = os.WriteFile(filepath.Join(precompilePath, file.FileName), []byte(file.Content), 0o600); err != nil {
 					t.Fatalf("test %d: failed to write binding: %v", i, err)
