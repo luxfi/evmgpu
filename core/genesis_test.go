@@ -63,9 +63,11 @@ func setupGenesisBlock(db ethdb.Database, triedb *triedb.Database, genesis *Gene
 }
 
 func TestGenesisBlockForTesting(t *testing.T) {
-	// Hash changed when fixing BlobGasUsed/ExcessBlobGas encode/decode roundtrip
-	// to preserve zero values (not nil) for Cancun blocks
-	genesisBlockForTestingHash := common.HexToHash("0x114ce61b50051f70768f982f7b59e82dd73b7bbd768e310c9d9f508d492e687b")
+	// This is the hash luxfi/evm computes for the same genesis, from the same
+	// GenesisBlockForTesting body. The two agree; the older constant predates
+	// the BlobGasUsed/ExcessBlobGas roundtrip fix that keeps zero values zero
+	// rather than nil on Cancun blocks.
+	genesisBlockForTestingHash := common.HexToHash("0x517cc43afd8c4516d00dae3c767b336d4ad9a9aeffbf0a4b205ef0bdc6343f35")
 	block := GenesisBlockForTesting(rawdb.NewMemoryDatabase(), common.Address{1}, big.NewInt(1))
 	if block.Hash() != genesisBlockForTestingHash {
 		t.Errorf("wrong testing genesis hash, got %v, want %v", block.Hash(), genesisBlockForTestingHash)
