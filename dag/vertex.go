@@ -115,12 +115,12 @@ func (v *EVMVertex) marshal() []byte {
 
 // --- vertex.Vertex interface ---
 
-func (v *EVMVertex) ID() ids.ID          { return v.id }
-func (v *EVMVertex) Bytes() []byte        { return v.bytes }
-func (v *EVMVertex) Height() uint64       { return v.height }
-func (v *EVMVertex) Epoch() uint32        { return v.epoch }
-func (v *EVMVertex) Parents() []ids.ID    { return v.parents }
-func (v *EVMVertex) Txs() []ids.ID        { return v.txIDs }
+func (v *EVMVertex) ID() ids.ID             { return v.id }
+func (v *EVMVertex) Bytes() []byte          { return v.bytes }
+func (v *EVMVertex) Height() uint64         { return v.height }
+func (v *EVMVertex) Epoch() uint32          { return v.epoch }
+func (v *EVMVertex) Parents() []ids.ID      { return v.parents }
+func (v *EVMVertex) Txs() []ids.ID          { return v.txIDs }
 func (v *EVMVertex) Status() choices.Status { return v.status }
 
 func (v *EVMVertex) Accept(_ context.Context) error {

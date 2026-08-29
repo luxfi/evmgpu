@@ -35,17 +35,17 @@ type Scheduler struct {
 	}
 
 	// Atomic counters for task selection
-	executionIdx    atomic.Uint32 // Next tx to execute
-	validationIdx   atomic.Uint32 // Next tx to validate
-	numValidated    atomic.Uint32 // Termination counter
-	aborted         atomic.Bool   // Fatal error flag
+	executionIdx  atomic.Uint32 // Next tx to execute
+	validationIdx atomic.Uint32 // Next tx to validate
+	numValidated  atomic.Uint32 // Termination counter
+	aborted       atomic.Bool   // Fatal error flag
 }
 
 // NewScheduler creates a scheduler for a block with the given number of transactions.
 func NewScheduler(blockSize uint32) *Scheduler {
 	s := &Scheduler{
 		blockSize: blockSize,
-		txStates:  make([]struct {
+		txStates: make([]struct {
 			mu    sync.Mutex
 			state TxState
 		}, blockSize),

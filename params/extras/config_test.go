@@ -41,7 +41,7 @@ $`,
 				NetworkUpgrades: NetworkUpgrades{
 					EVMTimestamp:     pointer(uint64(1)),
 					DurangoTimestamp: pointer(uint64(2)),
-					QuasarTimestamp:    pointer(uint64(3)),
+					QuasarTimestamp:  pointer(uint64(3)),
 					FortunaTimestamp: pointer(uint64(4)),
 				},
 				FeeConfig: commontype.FeeConfig{
@@ -157,7 +157,7 @@ func TestChainConfigVerify(t *testing.T) {
 				NetworkUpgrades: NetworkUpgrades{
 					EVMTimestamp:     pointer(uint64(0)), // Must be 0 (genesis activation)
 					DurangoTimestamp: pointer(uint64(0)), // Must be 0 for default
-					QuasarTimestamp:    nil,                // Optional
+					QuasarTimestamp:  nil,                // Optional
 					FortunaTimestamp: nil,                // Optional
 				},
 				LuxContext: LuxContext{ConsensusCtx: utilstest.NewTestConsensusContext(t)},
