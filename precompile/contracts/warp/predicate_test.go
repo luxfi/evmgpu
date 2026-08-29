@@ -227,6 +227,23 @@ func (t *testValidatorStateWrapper) GetNetworkID(id ids.ID) (ids.ID, error) {
 	return ids.Empty, nil
 }
 
+// newPredicateConsensusCtx builds a consensus context whose Runtime carries the
+// given validator state.
+//
+// runtime's With/Get pair for validator state does not compose:
+// WithValidatorState stores under a context key, while GetValidatorState reads
+// Runtime.ValidatorState and never looks at that key. VerifyPredicate reads
+// through GetValidatorState, so a test that injects with WithValidatorState is
+// silently ignored and verification runs against the empty default set --
+// "signer index N exceeds validator count 0". Inject through the Runtime.
+func newPredicateConsensusCtx(tb testing.TB, state consensuscontext.ValidatorState) context.Context {
+	rt := utilstest.NewTestRuntime(tb, ids.GenerateTestID())
+	rt.ValidatorState = state
+	// Match the network ID the messages in this file are built with.
+	rt.NetworkID = constants.UnitTestID
+	return consensuscontext.WithContext(context.Background(), rt)
+}
+
 // createConsensusCtx creates a context.Context instance with a validator state specified by the given validatorRanges
 func createConsensusCtx(tb testing.TB, validatorRanges []validatorRange) context.Context {
 	getValidatorsOutput := make(map[ids.NodeID]*validators.GetValidatorOutput)
@@ -244,21 +261,18 @@ func createConsensusCtx(tb testing.TB, validatorRanges []validatorRange) context
 		}
 	}
 
-	consensusCtx := utilstest.NewTestConsensusContext(tb)
 	state := &validatorstest.State{
 		GetValidatorSetF: func(ctx context.Context, height uint64, chainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
 			return getValidatorsOutput, nil
 		},
 	}
-	// Use consensuscontext.WithValidatorState to add validator state to context
 	wrappedState := &testValidatorStateWrapper{
 		State: state,
 		GetNetworkIDF: func(id ids.ID) (ids.ID, error) {
 			return sourceNetworkID, nil
 		},
 	}
-	consensusCtx = consensuscontext.WithValidatorState(consensusCtx, wrappedState)
-	return consensusCtx
+	return newPredicateConsensusCtx(tb, wrappedState)
 }
 
 func createValidPredicateTest(consensusCtx context.Context, numKeys uint64, predicateBytes []byte) precompiletest.PredicateTest {
@@ -324,11 +338,6 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 	predicateBytes := predicate.PackPredicate(warpMsg.Bytes())
 
 	chainID := ids.GenerateTestID()
-	// The runtime carries NetworkID/ChainID for consensuscontext.Get{Chain,Network}ID.
-	consensusCtx := utilstest.NewTestConsensusContextWithChainID(t, chainID)
-	// The predicate path reads the chain ID through evmconsensus, which keys the
-	// context separately from the runtime.
-	consensusCtx = evmconsensus.WithChainID(consensusCtx, chainID)
 
 	state := &validatorstest.State{
 		GetValidatorSetF: func(ctx context.Context, height uint64, requestedChainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
@@ -341,7 +350,6 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 		},
 	}
 
-	// Add validator state to context (wrap it first)
 	wrappedState := &testValidatorStateWrapper{
 		State: state,
 		GetChainIDF: func(cID ids.ID) (ids.ID, error) {
@@ -350,7 +358,15 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 			return constants.PrimaryNetworkID, nil
 		},
 	}
-	consensusCtx = consensuscontext.WithValidatorState(consensusCtx, wrappedState)
+
+	// The runtime carries NetworkID/ChainID and the validator state, which is
+	// the only place VerifyPredicate looks for the latter.
+	rt := utilstest.NewTestRuntime(t, chainID)
+	rt.ValidatorState = wrappedState
+	consensusCtx := consensuscontext.WithContext(context.Background(), rt)
+	// The predicate path reads the receiving chain ID through evmconsensus,
+	// which keys the context separately from the runtime.
+	consensusCtx = evmconsensus.WithChainID(consensusCtx, chainID)
 
 	test := precompiletest.PredicateTest{
 		Config: NewConfig(utils.NewUint64(0), 0, requirePrimaryNetworkSigners),
@@ -741,21 +757,18 @@ func makeWarpPredicateTests(tb testing.TB) map[string]precompiletest.PredicateTe
 			}
 		}
 
-		consensusCtx := utilstest.NewTestConsensusContext(tb)
-
 		state := &validatorstest.State{
 			GetValidatorSetF: func(ctx context.Context, height uint64, chainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
 				return getValidatorsOutput, nil
 			},
 		}
-		// Wrap state and add to context
 		wrappedState := &testValidatorStateWrapper{
 			State: state,
 			GetNetworkIDF: func(id ids.ID) (ids.ID, error) {
 				return sourceNetworkID, nil
 			},
 		}
-		consensusCtx = consensuscontext.WithValidatorState(consensusCtx, wrappedState)
+		consensusCtx := newPredicateConsensusCtx(tb, wrappedState)
 
 		predicateTests[testName] = createValidPredicateTest(consensusCtx, uint64(numSigners), predicateBytes)
 	}
