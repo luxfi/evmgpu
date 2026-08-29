@@ -5,7 +5,6 @@ package warp
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -19,7 +18,6 @@ import (
 	log "github.com/luxfi/log"
 	"github.com/luxfi/math"
 	consensuscontext "github.com/luxfi/runtime"
-	validators "github.com/luxfi/validators"
 	"github.com/luxfi/warp"
 	"github.com/luxfi/warp/payload"
 )
@@ -193,12 +191,6 @@ func (c *Config) PredicateGas(predicateBytes []byte) (uint64, error) {
 	return totalGas, nil
 }
 
-// ValidatorOutputGetter is an optional interface that can be implemented
-// by validator states to provide full validator output including public keys
-type ValidatorOutputGetter interface {
-	GetValidatorSetWithOutput(ctx context.Context, height uint64, chainID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error)
-}
-
 // VerifyPredicate returns whether the predicate described by [predicateBytes] passes verification.
 func (c *Config) VerifyPredicate(predicateContext *precompileconfig.PredicateContext, predicateBytes []byte) error {
 	unpackedPredicateBytes, err := predicate.UnpackPredicate(predicateBytes)
@@ -261,64 +253,33 @@ func (c *Config) VerifyPredicate(predicateContext *precompileconfig.PredicateCon
 
 	pChainHeight := predicateContext.ProposerVMBlockCtx.PChainHeight
 
-	// Build warp validators - try to get full validator output with public keys
-	var allValidators []*warp.Validator
+	// Build the warp validator set for the requested chain.
+	vdrOutputs, err := validatorState.GetValidatorSet(predicateContext.ConsensusCtx, pChainHeight, requestedChainID)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errCannotRetrieveValidatorSet, err)
+	}
+
+	allValidators := make([]*warp.Validator, 0, len(vdrOutputs))
 	var totalWeight uint64
+	for nodeID, output := range vdrOutputs {
+		totalWeight += output.Weight
 
-	// Check if the validator state supports getting full output with public keys
-	if outputGetter, ok := validatorState.(ValidatorOutputGetter); ok {
-		// Use the full validator output which includes public keys
-		vdrOutputs, err := outputGetter.GetValidatorSetWithOutput(predicateContext.ConsensusCtx, pChainHeight, requestedChainID)
-		if err != nil {
-			return fmt.Errorf("%w: %w", errCannotRetrieveValidatorSet, err)
+		vdr := &warp.Validator{
+			NodeID: nodeID,
+			Weight: output.Weight,
 		}
-
-		allValidators = make([]*warp.Validator, 0, len(vdrOutputs))
-		for nodeID, output := range vdrOutputs {
-			totalWeight += output.Weight
-
-			vdr := &warp.Validator{
-				NodeID: nodeID,
-				Weight: output.Weight,
+		// A validator registered without a BLS key cannot sign; it still counts
+		// toward total weight, and is dropped from the signer set below.
+		if len(output.PublicKey) > 0 {
+			pk, pkErr := warp.ParsePublicKey(output.PublicKey)
+			if pkErr == nil {
+				vdr.PublicKey = pk
+				vdr.PublicKeyBytes = output.PublicKey
+			} else {
+				log.Debug("failed to parse validator public key", "nodeID", nodeID, "err", pkErr)
 			}
-
-			// Parse public key if available
-			if len(output.PublicKey) > 0 {
-				pk, pkErr := warp.ParsePublicKey(output.PublicKey)
-				if pkErr == nil {
-					vdr.PublicKey = pk
-					vdr.PublicKeyBytes = output.PublicKey
-				} else {
-					log.Debug("failed to parse validator public key", "nodeID", nodeID, "err", pkErr)
-				}
-			}
-
-			allValidators = append(allValidators, vdr)
 		}
-	} else {
-		// Fallback: get full output (signature verification will fail without public keys)
-		vdrOutputs, err := validatorState.GetValidatorSet(predicateContext.ConsensusCtx, pChainHeight, requestedChainID)
-		if err != nil {
-			return fmt.Errorf("%w: %w", errCannotRetrieveValidatorSet, err)
-		}
-
-		allValidators = make([]*warp.Validator, 0, len(vdrOutputs))
-		for nodeID, output := range vdrOutputs {
-			totalWeight += output.Weight
-			vdr := &warp.Validator{
-				NodeID: nodeID,
-				Weight: output.Weight,
-			}
-			// Parse public key if available
-			if len(output.PublicKey) > 0 {
-				pk, pkErr := warp.ParsePublicKey(output.PublicKey)
-				if pkErr == nil {
-					vdr.PublicKey = pk
-					vdr.PublicKeyBytes = output.PublicKey
-				}
-			}
-			allValidators = append(allValidators, vdr)
-		}
+		allValidators = append(allValidators, vdr)
 	}
 
 	// Aggregate validators by public key - this handles the case where multiple
