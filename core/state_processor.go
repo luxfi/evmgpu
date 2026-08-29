@@ -34,7 +34,6 @@ import (
 
 	"github.com/luxfi/crypto"
 	"github.com/luxfi/evmgpu/consensus"
-	"github.com/luxfi/evmgpu/core/parallel"
 	"github.com/luxfi/evmgpu/core/state"
 	"github.com/luxfi/evmgpu/params"
 	"github.com/luxfi/evmgpu/params/extras"
@@ -121,68 +120,6 @@ func (p *StateProcessor) Process(block *types.Block, parent *types.Header, state
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
 	}
-
-	// =========================================================================
-	// Parallel execution path — try Block-STM for blocks with >= 4 transactions
-	// =========================================================================
-	if txs := block.Transactions(); len(txs) >= 4 {
-		engine := parallel.NewEngine(0) // auto-detect concurrency
-
-		// stateGetter closure: reads pre-block state from the base statedb
-		stateGetterFn := func(loc parallel.MemoryLocation) (parallel.MemoryValue, bool) {
-			switch loc.Type {
-			case parallel.LocationBalance:
-				bal := statedb.GetBalance(loc.Address)
-				var balHash common.Hash
-				bal.WriteToSlice(balHash[:])
-				return parallel.MemoryValue{Balance: balHash}, true
-			case parallel.LocationNonce:
-				nonce := statedb.GetNonce(loc.Address)
-				return parallel.MemoryValue{Nonce: nonce}, true
-			case parallel.LocationStorage:
-				val := statedb.GetState(loc.Address, loc.Slot)
-				return parallel.MemoryValue{Storage: val}, true
-			case parallel.LocationCodeHash:
-				ch := statedb.GetCodeHash(loc.Address)
-				return parallel.MemoryValue{Storage: ch}, true
-			}
-			return parallel.MemoryValue{}, false
-		}
-
-		// vmFactory closure: returns a new EVM with a statedb Copy
-		vmFactoryFn := func(txIdx parallel.TxIdx) (*vm.EVM, error) {
-			dbCopy := statedb.Copy()
-			evm := vm.NewEVM(context, dbCopy.VMStateDBAdapter(), p.config, cfg)
-			return evm, nil
-		}
-
-		receipts, err := engine.ExecuteBlock(p.config, header, txs, stateGetterFn, vmFactoryFn)
-		if err == nil && receipts != nil {
-			// Parallel execution succeeded — apply write sets to canonical state
-			// and return results
-			allLogs := make([]*types.Log, 0)
-			var totalGas uint64
-			for _, r := range receipts {
-				if r != nil {
-					allLogs = append(allLogs, r.Logs...)
-					totalGas = r.CumulativeGasUsed
-				}
-			}
-
-			// Finalize the block
-			if err := p.engine.Finalize(p.bc, block, parent, statedb, receipts); err != nil {
-				log.Warn("parallel execution finalize failed, falling through to sequential", "err", err)
-			} else {
-				return receipts, allLogs, totalGas, nil
-			}
-		} else if err != nil {
-			log.Debug("parallel execution failed, falling through to sequential", "err", err)
-		}
-	}
-
-	// =========================================================================
-	// Sequential execution path (unchanged)
-	// =========================================================================
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
