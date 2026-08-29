@@ -22,19 +22,16 @@ import (
 // transition from `parentTimestamp` to the timestamp set in `blockContext`. If this is the case, it calls [modules.Module]'s Configure
 // to apply the necessary state transitions for the upgrade.
 //
-// IMPORTANT: This function does NOT run at genesis (parentTimestamp == nil). Genesis state is determined
-// purely by alloc + header, ensuring deterministic genesis hash. Precompile initialization happens via
-// scheduled state transitions at a later time, not at genesis.
+// Genesis is the transition with no parent, i.e. parentTimestamp == nil. It is not a
+// special case here: IsForkTransition already reads a nil parent as "activate iff the
+// configured timestamp has been reached", so a precompile declared in GenesisPrecompiles
+// at timestamp 0 is configured into the genesis state, exactly as luxfi/evm does it.
+// Genesis remains deterministic because it is still a pure function of the chain config,
+// the alloc and the header. Short-circuiting on a nil parent instead would silently drop
+// every genesis precompile from the state root and fork this EVM off the Go line.
 //
 // In block processing and building, [ApplyUpgrades] is called instead which also applies state upgrades.
 func ApplyPrecompileActivations(c *params.ChainConfig, parentTimestamp *uint64, blockContext contract.ConfigurationBlockContext, statedb *state.StateDB) error {
-	// Genesis guard: at genesis (parentTimestamp == nil), return immediately.
-	// Genesis state must be a pure function of alloc + header for determinism.
-	// Stateful precompile initialization happens via scheduled activations, not genesis.
-	if parentTimestamp == nil {
-		return nil
-	}
-
 	blockTimestamp := blockContext.Timestamp()
 	// Note: [modules.RegisteredModules] returns precompiles sorted by module addresses.
 	// This ensures:
