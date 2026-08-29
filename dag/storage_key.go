@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	bitmapWords = 64  // 64 uint64 = 512 bytes = 4096 bits
+	bitmapWords = 64 // 64 uint64 = 512 bytes = 4096 bits
 	bitmapBits  = bitmapWords * 64
 )
 

@@ -18,9 +18,9 @@ import (
 	// ============================================
 	// Post-Quantum Cryptography (0x0600-0x06FF)
 	// ============================================
-	_ "github.com/luxfi/precompile/mldsa"    // ML-DSA signature verification (FIPS 204)
-	_ "github.com/luxfi/precompile/mlkem"    // ML-KEM key encapsulation (FIPS 203)
-	_ "github.com/luxfi/precompile/slhdsa"   // SLH-DSA stateless hash signatures (FIPS 205)
+	_ "github.com/luxfi/precompile/mldsa"  // ML-DSA signature verification (FIPS 204)
+	_ "github.com/luxfi/precompile/mlkem"  // ML-KEM key encapsulation (FIPS 203)
+	_ "github.com/luxfi/precompile/slhdsa" // SLH-DSA stateless hash signatures (FIPS 205)
 
 	// ============================================
 	// Privacy/Encryption (0x0700-0x07FF)
@@ -34,8 +34,8 @@ import (
 	// Threshold Signatures (0x0800-0x08FF)
 	// ============================================
 	_ "github.com/luxfi/precompile/cggmp21" // CGGMP21 threshold ECDSA
-	_ "github.com/luxfi/precompile/frost"   // FROST threshold Schnorr
 	_ "github.com/luxfi/precompile/corona"  // 0x012206 Corona (Ring-LWE threshold, FIPS-equivalent)
+	_ "github.com/luxfi/precompile/frost"   // FROST threshold Schnorr
 	_ "github.com/luxfi/precompile/pulsar"  // 0x012204 Pulsar (Module-LWE threshold FIPS 204)
 
 	// ============================================
@@ -52,7 +52,7 @@ import (
 	// ============================================
 	// AI Mining (0x0300-0x03FF)
 	// ============================================
-	_ "github.com/luxfi/precompile/ai" // AI mining rewards, TEE verification
+	_ "github.com/luxfi/precompile/ai"            // AI mining rewards, TEE verification
 	_ "github.com/luxfi/precompile/inference"     // 0x0300..03 deterministic int8 inference (Tier-1)
 	_ "github.com/luxfi/precompile/modelregistry" // ModelSpec registry
 

@@ -316,7 +316,7 @@ func GetDefaultNetworkUpgrades() NetworkUpgrades {
 	return NetworkUpgrades{
 		EVMTimestamp:     utils.NewUint64(0),
 		DurangoTimestamp: utils.NewUint64(0), // Already activated
-		QuasarTimestamp:    nil,                // Not scheduled
+		QuasarTimestamp:  nil,                // Not scheduled
 		FortunaTimestamp: nil,                // Not scheduled
 		GraniteTimestamp: nil,                // Not scheduled
 	}

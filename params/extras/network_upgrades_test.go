@@ -18,7 +18,7 @@ func getTestFujiUpgrades() NetworkUpgrades {
 	return NetworkUpgrades{
 		EVMTimestamp:     utils.NewUint64(0),
 		DurangoTimestamp: utils.NewUint64(0),
-		QuasarTimestamp:    utils.NewUint64(100), // Set for testing
+		QuasarTimestamp:  utils.NewUint64(100), // Set for testing
 		FortunaTimestamp: utils.NewUint64(1000),
 		GraniteTimestamp: nil,
 	}
@@ -233,7 +233,7 @@ func TestVerifyNetworkUpgrades(t *testing.T) {
 			upgrades: &NetworkUpgrades{
 				EVMTimestamp:     utils.NewUint64(0),
 				DurangoTimestamp: utils.NewUint64(0), // Must be 0 since default is 0
-				QuasarTimestamp:    utils.NewUint64(0), // Must be 0 for Latest
+				QuasarTimestamp:  utils.NewUint64(0), // Must be 0 for Latest
 				FortunaTimestamp: utils.NewUint64(0), // Must be 0 for Latest
 				GraniteTimestamp: utils.NewUint64(0), // Must be 0 for Latest
 			},
@@ -290,7 +290,7 @@ func TestVerifyNetworkUpgrades(t *testing.T) {
 			upgrades: &NetworkUpgrades{
 				EVMTimestamp:     utils.NewUint64(0),
 				DurangoTimestamp: utils.NewUint64(0), // Genesis
-				QuasarTimestamp:    nil,                // Valid when  Quasar is unscheduled
+				QuasarTimestamp:  nil,                // Valid when  Quasar is unscheduled
 			},
 			luxdUpgrades: getTestMainnetConfig(), // Durango is active,  Quasar is not
 			valid:        true,
@@ -300,7 +300,7 @@ func TestVerifyNetworkUpgrades(t *testing.T) {
 			upgrades: &NetworkUpgrades{
 				EVMTimestamp:     utils.NewUint64(0),
 				DurangoTimestamp: utils.NewUint64(100),
-				QuasarTimestamp:    utils.NewUint64(99),
+				QuasarTimestamp:  utils.NewUint64(99),
 			},
 			luxdUpgrades: getTestMainnetConfig(),
 			valid:        false,
@@ -310,7 +310,7 @@ func TestVerifyNetworkUpgrades(t *testing.T) {
 			upgrades: &NetworkUpgrades{
 				EVMTimestamp:     utils.NewUint64(0),
 				DurangoTimestamp: utils.NewUint64(0),   // Genesis
-				QuasarTimestamp:    utils.NewUint64(500), // Test timestamp
+				QuasarTimestamp:  utils.NewUint64(500), // Test timestamp
 				FortunaTimestamp: nil,
 			},
 			luxdUpgrades: getTestFujiConfig(),
