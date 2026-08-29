@@ -28,6 +28,7 @@
 package bind
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -2179,9 +2180,6 @@ func golangBindings(t *testing.T, overload bool) {
 			}
 		})
 	}
-	// Convert the package to go modules and use published module versions.
-	moder := exec.Command(gocmd, "mod", "init", "bindtest")
-	moder.Dir = pkg
 	goEnv := os.Environ()
 	filteredEnv := make([]string, 0, len(goEnv))
 	for _, entry := range goEnv {
@@ -2190,9 +2188,31 @@ func golangBindings(t *testing.T, overload bool) {
 		}
 	}
 	goEnv = append(filteredEnv, "GOWORK=off", "GOPRIVATE=github.com/lux-private/*")
-	moder.Env = goEnv
-	if out, err := moder.CombinedOutput(); err != nil {
-		t.Fatalf("failed to convert binding test to modules: %v\n%s", err, out)
+
+	// Build the generated bindings against this working tree, using this
+	// repository's own module graph.
+	//
+	// Two things go wrong otherwise. Resolving github.com/luxfi/evmgpu from the
+	// proxy tests whatever was last published rather than the tree, so the test
+	// fails when the release has drifted and passes when the tree is broken.
+	// And a from-scratch tidy re-resolves every version, because the go command
+	// ignores exclude and replace directives in a module that is not the main
+	// one -- which pulled warp v1.24.1 here, a version this repository does not
+	// build with and where warp.UnsignedMessage no longer exists.
+	//
+	// Copying go.mod and go.sum across and renaming the module gives the
+	// binding test the same build list the repository itself uses.
+	root := moduleRoot(t, gocmd)
+	if err := copyModuleGraph(t, root, pkg); err != nil {
+		t.Fatalf("failed to seed the binding test module: %v", err)
+	}
+	editor := exec.Command(gocmd, "mod", "edit",
+		"-require", "github.com/luxfi/evmgpu@v0.0.0",
+		"-replace", "github.com/luxfi/evmgpu="+root)
+	editor.Dir = pkg
+	editor.Env = goEnv
+	if out, err := editor.CombinedOutput(); err != nil {
+		t.Fatalf("failed to point the binding test at the local module: %v\n%s", err, out)
 	}
 	tidier := exec.Command(gocmd, "mod", "tidy", "-compat=1.23")
 	tidier.Dir = pkg
@@ -2207,4 +2227,39 @@ func golangBindings(t *testing.T, overload bool) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to run binding test: %v\n%s", err, out)
 	}
+}
+
+// moduleRoot returns the directory holding this repository's go.mod, so that
+// generated code can be built against the working tree.
+func moduleRoot(t *testing.T, gocmd string) string {
+	t.Helper()
+	out, err := exec.Command(gocmd, "env", "GOMOD").Output()
+	if err != nil {
+		t.Fatalf("failed to locate the module: %v", err)
+	}
+	gomod := strings.TrimSpace(string(out))
+	if gomod == "" || gomod == os.DevNull {
+		t.Fatal("no go.mod in scope; cannot build the binding test against the working tree")
+	}
+	return filepath.Dir(gomod)
+}
+
+// copyModuleGraph writes this repository's go.mod and go.sum into dst, with the
+// module renamed, so a generated test module resolves the same dependency
+// versions the repository does.
+func copyModuleGraph(t *testing.T, root, dst string) error {
+	t.Helper()
+	gomod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return err
+	}
+	gomod = bytes.Replace(gomod, []byte("module github.com/luxfi/evmgpu\n"), []byte("module bindtest\n"), 1)
+	if err := os.WriteFile(filepath.Join(dst, "go.mod"), gomod, 0600); err != nil {
+		return err
+	}
+	gosum, err := os.ReadFile(filepath.Join(root, "go.sum"))
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dst, "go.sum"), gosum, 0600)
 }
