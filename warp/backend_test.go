@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/luxfi/cache/lru"
+	"github.com/luxfi/crypto"
 	"github.com/luxfi/crypto/bls"
 	"github.com/luxfi/database"
 	"github.com/luxfi/database/memdb"
@@ -27,6 +28,14 @@ var (
 	testPayload         = []byte("test")
 	testUnsignedMessage *warp.UnsignedMessage
 )
+
+// evmMessageID is the key the backend stores a message under. AddMessage,
+// GetMessageSignature and the off-chain message load all hash the message ID
+// before touching the database, so a lookup by the bare ID misses.
+func evmMessageID(msg *warp.UnsignedMessage) ids.ID {
+	id := msg.ID()
+	return ids.ID(crypto.Keccak256Hash(id[:]))
+}
 
 func init() {
 	testSourceAddress = make([]byte, 20)
@@ -149,7 +158,7 @@ func TestOffChainMessages(t *testing.T) {
 				testUnsignedMessage.Bytes(),
 			},
 			check: func(require *require.Assertions, b Backend) {
-				msg, err := b.GetMessage(testUnsignedMessage.ID())
+				msg, err := b.GetMessage(evmMessageID(testUnsignedMessage))
 				require.NoError(err)
 				require.Equal(testUnsignedMessage.Bytes(), msg.Bytes())
 
@@ -162,7 +171,7 @@ func TestOffChainMessages(t *testing.T) {
 		},
 		"unknown message": {
 			check: func(require *require.Assertions, b Backend) {
-				_, err := b.GetMessage(testUnsignedMessage.ID())
+				_, err := b.GetMessage(evmMessageID(testUnsignedMessage))
 				require.ErrorIs(err, database.ErrNotFound)
 			},
 		},
