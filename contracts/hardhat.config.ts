@@ -3,7 +3,7 @@ import "./tasks"
 
 // HardHat users must populate these environment variables in order to connect to their evm instance
 // Since the blockchainID is not known in advance, there's no good default to use and we use the C-Chain here.
-var local_rpc_uri = process.env.RPC_URI || "http://127.0.0.1:9650/v1/chain/C/rpc"
+var local_rpc_uri = process.env.RPC_URI || "http://127.0.0.1:9650/v1/chain/c"
 var local_chain_id = parseInt(process.env.CHAIN_ID, 10) || 99999
 
 export default {
