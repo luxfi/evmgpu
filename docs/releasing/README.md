@@ -120,7 +120,7 @@ Once the tag is created, you need to test it on the Testnet testnet both locally
             "method": "platform.getBlockchains",
             "params": {},
             "id": 1
-        }'  https://api.lux-test.network/v1/chain/P | \
+        }'  https://api.lux-test.network/v1/chain/p | \
         jq -r '.result.blockchains[] | select(.subnetID=="7WtoAMPhrmh5KosDUsFL9yTcvw7YSxiKHPpdfs4JsgW47oZT5") |  "\(.name)\nBlockchain id: \(.id)\nVM id: \(.vmID)\n"'
         ```
 
@@ -140,7 +140,7 @@ Once the tag is created, you need to test it on the Testnet testnet both locally
             "method": "platform.getBlockchains",
             "params": {},
             "id": 1
-        }'  https://api.lux-test.network/v1/chain/P | \
+        }'  https://api.lux-test.network/v1/chain/p | \
         jq -r '.result.blockchains[] | select(.subnetID=="i9gFpZQHPLcGfZaQLiwFAStddQD7iTKBpFfurPFJsXm1CkTZK") |  "\(.name)\nBlockchain id: \(.id)\nVM id: \(.vmID)\n"'
         ```
 

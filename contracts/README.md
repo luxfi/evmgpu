@@ -53,7 +53,7 @@ In EVM, we provide a pre-configured file [hardhat.config.ts](https://github.com/
 The HardHat config file includes a single network configuration: `local`. `local` defaults to using the following values for the RPC URL and the Chain ID:
 
 ```js
-var local_rpc_uri = process.env.RPC_URI || "http://127.0.0.1:9650/v1/chain/C/rpc";
+var local_rpc_uri = process.env.RPC_URI || "http://127.0.0.1:9650/v1/chain/c";
 var local_chain_id = process.env.CHAIN_ID || 99999;
 ```
 
