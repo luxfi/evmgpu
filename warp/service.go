@@ -86,7 +86,7 @@ func (a *API) GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, qu
 		return nil, err
 	}
 	chainID := a.runtimeCtx.GetChainID()
-	unsignedMessage, err := warp.NewUnsignedMessage(a.runtimeCtx.GetNetworkID(), chainID, blockHashPayload.Bytes())
+	unsignedMessage, err := warp.NewMessage(a.runtimeCtx.GetNetworkID(), chainID, blockHashPayload.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (a *API) GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, qu
 	return a.aggregateSignatures(ctx, unsignedMessage, quorumNum, chainIDStr)
 }
 
-func (a *API) aggregateSignatures(ctx context.Context, unsignedMessage *warp.UnsignedMessage, quorumNum uint64, chainIDStr string) (hexutil.Bytes, error) {
+func (a *API) aggregateSignatures(ctx context.Context, unsignedMessage *warp.Message, quorumNum uint64, chainIDStr string) (hexutil.Bytes, error) {
 	chainID := a.runtimeCtx.GetChainID()
 	if len(chainIDStr) > 0 {
 		cid, err := ids.FromString(chainIDStr)
@@ -159,15 +159,15 @@ func (a *API) aggregateSignatures(ctx context.Context, unsignedMessage *warp.Uns
 		return nil, errors.New("signature aggregator not configured")
 	}
 
-	// Create initial message with empty signature for aggregation
-	// The SignatureAggregator will collect signatures and update the message
-	emptyBitSetSig := &warp.BitSetSignature{
+	// Create initial envelope with an empty Beam for aggregation.
+	// The SignatureAggregator collects signatures and re-aggregates the Beam.
+	emptyBeam := warp.BitSetSignature{
 		Signers:   warp.NewBitSet(),
 		Signature: [bls.SignatureLen]byte{},
 	}
-	initialMessage, err := warp.NewMessage(unsignedMessage, emptyBitSetSig)
+	initialMessage, err := warp.NewEnvelope(unsignedMessage, emptyBeam, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create initial message: %w", err)
+		return nil, fmt.Errorf("failed to create initial envelope: %w", err)
 	}
 
 	// Aggregate signatures from validators
@@ -185,7 +185,11 @@ func (a *API) aggregateSignatures(ctx context.Context, unsignedMessage *warp.Uns
 		return nil, fmt.Errorf("failed to aggregate signatures: %w", err)
 	}
 
-	return signedMessage.Bytes(), nil
+	signedBytes, err := signedMessage.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize signed warp envelope: %w", err)
+	}
+	return signedBytes, nil
 }
 
 // convertWarpSetToValidators converts a validators.WarpSet to a slice of warp.Validator

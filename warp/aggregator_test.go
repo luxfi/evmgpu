@@ -6,6 +6,7 @@ package warp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/luxfi/crypto/bls"
@@ -29,7 +30,7 @@ func newMockSignatureGetter() *mockSignatureGetter {
 	}
 }
 
-func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.UnsignedMessage) ([]byte, error) {
+func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
 	if err, ok := m.errors[nodeID]; ok {
 		return nil, err
 	}
@@ -38,8 +39,7 @@ func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeI
 	}
 	// Sign with secret key if available
 	if sk, ok := m.secretKeys[nodeID]; ok {
-		msgBytes := unsignedMessage.Bytes()
-		sig, err := sk.Sign(msgBytes)
+		sig, err := sk.Sign(warp.BeamSigningBytes(unsignedMessage.ID()))
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +88,7 @@ func TestSignatureAggregator_AggregateSignatures(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewUnsignedMessage(networkID, sourceChainID, payload)
+	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Test successful aggregation with 67% quorum
@@ -103,13 +103,46 @@ func TestSignatureAggregator_AggregateSignatures(t *testing.T) {
 	require.NotEmpty(signedMsgBytes)
 
 	// Verify the signed message can be parsed
-	signedMsg, err := warp.ParseMessage(signedMsgBytes)
+	signedMsg, err := warp.ParseEnvelope(signedMsgBytes)
 	require.NoError(err)
 	require.NotNil(signedMsg)
 
-	// Verify signature
-	err = signedMsg.Signature.Verify(unsignedMsg.Bytes(), toWarpValidators(validators))
-	require.NoError(err)
+	// Verify the Beam aggregate over the ZAP digest D. BitSetSignature.verify is
+	// unexported post-ZAP, so check the aggregate directly against the same
+	// domain warp.Signer signs.
+	require.NoError(verifyBeamAggregate(signedMsg, toWarpValidators(validators)))
+}
+
+// verifyBeamAggregate aggregates the public keys of the validators selected by
+// the envelope's signer bitset and checks the Beam against
+// warp.BeamSigningBytes(D).
+func verifyBeamAggregate(env *warp.Envelope, validators []*warp.Validator) error {
+	signers := env.Beam.Signers
+	pks := make([]*bls.PublicKey, 0, signers.Len())
+	for i := 0; i < signers.BitLen(); i++ {
+		if !signers.Contains(i) {
+			continue
+		}
+		if i >= len(validators) {
+			return fmt.Errorf("signer index %d exceeds validator count %d", i, len(validators))
+		}
+		pks = append(pks, validators[i].PublicKey)
+	}
+	if len(pks) == 0 {
+		return errors.New("no signers")
+	}
+	aggPK, err := bls.AggregatePublicKeys(pks)
+	if err != nil {
+		return err
+	}
+	sig, err := bls.SignatureFromBytes(env.Beam.Signature[:])
+	if err != nil {
+		return err
+	}
+	if !bls.Verify(aggPK, sig, warp.BeamSigningBytes(env.Message.ID())) {
+		return warp.ErrInvalidSignature
+	}
+	return nil
 }
 
 func TestSignatureAggregator_InsufficientQuorum(t *testing.T) {
@@ -149,7 +182,7 @@ func TestSignatureAggregator_InsufficientQuorum(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewUnsignedMessage(networkID, sourceChainID, payload)
+	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Try to aggregate with 67% quorum - should fail (only 1/3 validators available)
@@ -174,7 +207,7 @@ func TestSignatureAggregator_NoValidators(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewUnsignedMessage(networkID, sourceChainID, payload)
+	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Empty validator set
@@ -218,7 +251,7 @@ func TestSignatureAggregator_AllValidatorsFail(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewUnsignedMessage(networkID, sourceChainID, payload)
+	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	_, err = aggregator.AggregateSignatures(

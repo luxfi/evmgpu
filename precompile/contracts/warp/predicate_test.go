@@ -39,7 +39,7 @@ var (
 	sourceNetworkID = ids.GenerateTestID()
 
 	// valid unsigned warp message used throughout testing
-	unsignedMsg *warp.UnsignedMessage
+	unsignedMsg *warp.Message
 	// valid addressed payload
 	addressedPayload      *payload.AddressedCall
 	addressedPayloadBytes []byte
@@ -86,13 +86,15 @@ func init() {
 		panic(err)
 	}
 	addressedPayloadBytes = addressedPayload.Bytes()
-	unsignedMsg, err = warp.NewUnsignedMessage(constants.UnitTestID, sourceChainID, addressedPayload.Bytes())
+	unsignedMsg, err = warp.NewMessage(constants.UnitTestID, sourceChainID, addressedPayload.Bytes())
 	if err != nil {
 		panic(err)
 	}
 
+	// Post-ZAP the BLS Beam signs BeamSigningBytes(D), not the raw bytes.
+	beamMsg := warp.BeamSigningBytes(unsignedMsg.ID())
 	for _, testVdr := range testVdrs {
-		blsSignature, err := testVdr.sk.Sign(unsignedMsg.Bytes())
+		blsSignature, err := testVdr.sk.Sign(beamMsg)
 		if err != nil {
 			panic(err)
 		}
@@ -143,7 +145,7 @@ func newTestValidator() *testValidator {
 
 // createWarpMessage constructs a signed warp message using the global variable [unsignedMsg]
 // and the first [numKeys] signatures from [blsSignatures]
-func createWarpMessage(numKeys int) *warp.Message {
+func createWarpMessage(numKeys int) *warp.Envelope {
 	aggregateSignature, err := bls.AggregateSignatures(blsSignatures[0:numKeys])
 	if err != nil {
 		panic(err)
@@ -152,26 +154,27 @@ func createWarpMessage(numKeys int) *warp.Message {
 	for i := 0; i < numKeys; i++ {
 		bitSet.Add(i)
 	}
-	warpSignature := &warp.BitSetSignature{
+	beam := warp.BitSetSignature{
 		Signers: bitSet,
 	}
-	copy(warpSignature.Signature[:], bls.SignatureToBytes(aggregateSignature))
+	copy(beam.Signature[:], bls.SignatureToBytes(aggregateSignature))
 
-	// Create a simplified Message structure for testing
-	// Since the warp package has interface serialization issues,
-	// we'll create a mock message that contains the necessary data
-	warpMsg := &warp.Message{
-		UnsignedMessage: unsignedMsg,
-		Signature:       warpSignature,
+	env, err := warp.NewEnvelope(unsignedMsg, beam, nil, nil)
+	if err != nil {
+		panic(err)
 	}
-	return warpMsg
+	return env
 }
 
 // createPredicate constructs a warp message using createWarpMessage with numKeys signers
 // and packs it into predicate encoding.
 func createPredicate(numKeys int) []byte {
 	warpMsg := createWarpMessage(numKeys)
-	predicateBytes := predicate.PackPredicate(warpMsg.Bytes())
+	envBytes, err := warpMsg.Bytes()
+	if err != nil {
+		panic(err)
+	}
+	predicateBytes := predicate.PackPredicate(envBytes)
 	return predicateBytes
 }
 
@@ -297,13 +300,16 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 	cChainID := ids.GenerateTestID()
 	addressedCall, err := payload.NewAddressedCall(agoUtils.RandomBytes(20), agoUtils.RandomBytes(100))
 	require.NoError(err)
-	unsignedMsg, err := warp.NewUnsignedMessage(constants.UnitTestID, cChainID, addressedCall.Bytes())
+	unsignedMsg, err := warp.NewMessage(constants.UnitTestID, cChainID, addressedCall.Bytes())
 	require.NoError(err)
+
+	// Post-ZAP the BLS Beam signs BeamSigningBytes(D), not the raw bytes.
+	beamMsg := warp.BeamSigningBytes(unsignedMsg.ID())
 
 	getValidatorsOutput := make(map[ids.NodeID]*validators.GetValidatorOutput)
 	blsSignatures := make([]*bls.Signature, 0, numKeys)
 	for i := 0; i < numKeys; i++ {
-		sig, err := testVdrs[i].sk.Sign(unsignedMsg.Bytes())
+		sig, err := testVdrs[i].sk.Sign(beamMsg)
 		require.NoError(err)
 
 		validatorOutput := &validators.GetValidatorOutput{
@@ -320,16 +326,16 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 	for i := 0; i < numKeys; i++ {
 		bitSet.Add(i)
 	}
-	warpSignature := &warp.BitSetSignature{
+	beam := warp.BitSetSignature{
 		Signers: bitSet,
 	}
-	copy(warpSignature.Signature[:], bls.SignatureToBytes(aggregateSignature))
-	warpMsg := &warp.Message{
-		UnsignedMessage: unsignedMsg,
-		Signature:       warpSignature,
-	}
+	copy(beam.Signature[:], bls.SignatureToBytes(aggregateSignature))
+	warpMsg, err := warp.NewEnvelope(unsignedMsg, beam, nil, nil)
+	require.NoError(err)
 
-	predicateBytes := predicate.PackPredicate(warpMsg.Bytes())
+	warpMsgBytes, err := warpMsg.Bytes()
+	require.NoError(err)
+	predicateBytes := predicate.PackPredicate(warpMsgBytes)
 
 	chainID := ids.GenerateTestID()
 
@@ -419,7 +425,8 @@ func TestInvalidWarpMessage(t *testing.T) {
 		},
 	})
 	warpMsg := createWarpMessage(1)
-	warpMsgBytes := warpMsg.Bytes()
+	warpMsgBytes, err := warpMsg.Bytes()
+	require.NoError(t, err)
 	warpMsgBytes = append(warpMsgBytes, byte(0x01)) // Invalidate warp message packing
 	predicateBytes := predicate.PackPredicate(warpMsgBytes)
 
@@ -455,18 +462,17 @@ func TestInvalidAddressedPayload(t *testing.T) {
 	for i := 0; i < numKeys; i++ {
 		bitSet.Add(i)
 	}
-	warpSignature := &warp.BitSetSignature{
+	beam := warp.BitSetSignature{
 		Signers: bitSet,
 	}
-	copy(warpSignature.Signature[:], bls.SignatureToBytes(aggregateSignature))
+	copy(beam.Signature[:], bls.SignatureToBytes(aggregateSignature))
 	// Create an unsigned message with an invalid addressed payload
-	unsignedMsg, err := warp.NewUnsignedMessage(constants.UnitTestID, sourceChainID, []byte{1, 2, 3})
+	unsignedMsg, err := warp.NewMessage(constants.UnitTestID, sourceChainID, []byte{1, 2, 3})
 	require.NoError(t, err)
-	warpMsg := &warp.Message{
-		UnsignedMessage: unsignedMsg,
-		Signature:       warpSignature,
-	}
-	warpMsgBytes := warpMsg.Bytes()
+	warpMsg, err := warp.NewEnvelope(unsignedMsg, beam, nil, nil)
+	require.NoError(t, err)
+	warpMsgBytes, err := warpMsg.Bytes()
+	require.NoError(t, err)
 	predicateBytes := predicate.PackPredicate(warpMsgBytes)
 
 	test := precompiletest.PredicateTest{
@@ -488,20 +494,18 @@ func TestInvalidAddressedPayload(t *testing.T) {
 func TestInvalidBitSet(t *testing.T) {
 	addressedCall, err := payload.NewAddressedCall(agoUtils.RandomBytes(20), agoUtils.RandomBytes(100))
 	require.NoError(t, err)
-	unsignedMsg, err := warp.NewUnsignedMessage(
+	unsignedMsg, err := warp.NewMessage(
 		constants.UnitTestID,
 		sourceChainID,
 		addressedCall.Bytes(),
 	)
 	require.NoError(t, err)
 
-	msg := &warp.Message{
-		UnsignedMessage: unsignedMsg,
-		Signature: &warp.BitSetSignature{
-			Signers:   make([]byte, 1),
-			Signature: [bls.SignatureLen]byte{},
-		},
-	}
+	msg, err := warp.NewEnvelope(unsignedMsg, warp.BitSetSignature{
+		Signers:   make([]byte, 1),
+		Signature: [bls.SignatureLen]byte{},
+	}, nil, nil)
+	require.NoError(t, err)
 
 	numKeys := 1
 	consensusCtx := createConsensusCtx(t, []validatorRange{
@@ -512,7 +516,9 @@ func TestInvalidBitSet(t *testing.T) {
 			publicKey: true,
 		},
 	})
-	predicateBytes := predicate.PackPredicate(msg.Bytes())
+	msgBytes, err := msg.Bytes()
+	require.NoError(t, err)
+	predicateBytes := predicate.PackPredicate(msgBytes)
 	test := precompiletest.PredicateTest{
 		Config: NewDefaultConfig(utils.NewUint64(0)),
 		PredicateContext: &precompileconfig.PredicateContext{

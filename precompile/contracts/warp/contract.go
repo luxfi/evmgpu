@@ -265,7 +265,7 @@ func sendWarpMessage(accessibleState contract.AccessibleState, caller common.Add
 	if err != nil {
 		return nil, remainingGas, err
 	}
-	unsignedWarpMessage, err := warp.NewUnsignedMessage(
+	unsignedWarpMessage, err := warp.NewMessage(
 		consensuscontext.GetNetworkID(ctx),
 		sourceChainID,
 		addressedPayload.Bytes(),
@@ -304,14 +304,14 @@ func PackSendWarpMessageEvent(sourceAddress common.Address, unsignedMessageID co
 	return WarpABI.PackEvent("SendWarpMessage", sourceAddress, unsignedMessageID, unsignedMessageBytes)
 }
 
-// UnpackSendWarpEventDataToMessage attempts to unpack event [data] as warp.UnsignedMessage.
-func UnpackSendWarpEventDataToMessage(data []byte) (*warp.UnsignedMessage, error) {
+// UnpackSendWarpEventDataToMessage attempts to unpack event [data] as warp.Message.
+func UnpackSendWarpEventDataToMessage(data []byte) (*warp.Message, error) {
 	event := SendWarpMessageEventData{}
 	err := WarpABI.UnpackIntoInterface(&event, "SendWarpMessage", data)
 	if err != nil {
 		return nil, err
 	}
-	return warp.ParseUnsignedMessage(event.Message)
+	return warp.ParseMessage(event.Message)
 }
 
 // createWarpPrecompile returns a StatefulPrecompiledContract with getters and setters for the precompile.

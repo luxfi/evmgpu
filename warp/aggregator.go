@@ -22,7 +22,7 @@ var (
 // SignatureGetter fetches a signature for a warp message from a specific validator
 type SignatureGetter interface {
 	// GetSignature fetches a signature for the message from the given node
-	GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.UnsignedMessage) ([]byte, error)
+	GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error)
 }
 
 // ValidatorInfo contains validator information for signature aggregation
@@ -49,7 +49,7 @@ func NewSignatureAggregator(signatureGetter SignatureGetter) *SignatureAggregato
 // Returns the signed message bytes if successful
 func (a *SignatureAggregator) AggregateSignatures(
 	ctx context.Context,
-	unsignedMessage *warp.UnsignedMessage,
+	unsignedMessage *warp.Message,
 	validators []*ValidatorInfo,
 	quorumNum uint64,
 	quorumDen uint64,
@@ -99,9 +99,9 @@ func (a *SignatureAggregator) AggregateSignatures(
 				return
 			}
 
-			// Verify signature against validator's public key
-			msgBytes := unsignedMessage.Bytes()
-			if !bls.Verify(validator.PublicKey, sig, msgBytes) {
+			// Verify the validator's share against the Beam domain,
+			// warp.BeamSigningBytes(D), which is what warp.Signer signs.
+			if !bls.Verify(validator.PublicKey, sig, warp.BeamSigningBytes(unsignedMessage.ID())) {
 				results <- sigResult{index: validator.Index, err: errors.New("signature verification failed")}
 				return
 			}
@@ -154,18 +154,22 @@ func (a *SignatureAggregator) AggregateSignatures(
 	var aggSigBytes [bls.SignatureLen]byte
 	copy(aggSigBytes[:], bls.SignatureToBytes(aggSig))
 
-	bitSetSig := &warp.BitSetSignature{
+	beam := warp.BitSetSignature{
 		Signers:   signers,
 		Signature: aggSigBytes,
 	}
 
-	// Create signed message
-	signedMessage, err := warp.NewMessage(unsignedMessage, bitSetSig)
+	// Wrap the message and its Beam in a signed envelope
+	signedMessage, err := warp.NewEnvelope(unsignedMessage, beam, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create signed message: %w", err)
+		return nil, fmt.Errorf("failed to create signed envelope: %w", err)
 	}
 
-	return signedMessage.Bytes(), nil
+	signedBytes, err := signedMessage.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize signed warp envelope: %w", err)
+	}
+	return signedBytes, nil
 }
 
 // safeAddUint64 adds two uint64 values with overflow check
@@ -188,7 +192,7 @@ func NewLocalSignatureGetter(backend Backend) *LocalSignatureGetter {
 }
 
 // GetSignature gets a signature from the local backend (this node)
-func (g *LocalSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.UnsignedMessage) ([]byte, error) {
+func (g *LocalSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
 	return g.backend.GetMessageSignature(ctx, unsignedMessage)
 }
 
@@ -209,7 +213,7 @@ func NewNetworkSignatureGetter(client RequestClient) *NetworkSignatureGetter {
 }
 
 // GetSignature fetches a signature from a network peer
-func (g *NetworkSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.UnsignedMessage) ([]byte, error) {
+func (g *NetworkSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
 	// Encode the signature request
 	request := unsignedMessage.Bytes()
 

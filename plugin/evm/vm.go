@@ -1962,6 +1962,6 @@ type warpVerifierAdapter struct {
 }
 
 // Verify implements warp.Verifier interface
-func (w *warpVerifierAdapter) Verify(ctx context.Context, msg *warptypes.UnsignedMessage, justification []byte) error {
+func (w *warpVerifierAdapter) Verify(ctx context.Context, msg *warptypes.Message, justification []byte) error {
 	return w.backend.Verify(ctx, msg, justification)
 }

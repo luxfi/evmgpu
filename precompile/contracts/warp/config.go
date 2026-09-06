@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/luxfi/constants"
+	"github.com/luxfi/crypto/bls"
 	evmconsensus "github.com/luxfi/evmgpu/consensus"
 	"github.com/luxfi/evmgpu/precompile/precompileconfig"
 	"github.com/luxfi/evmgpu/predicate"
@@ -161,21 +162,17 @@ func (c *Config) PredicateGas(predicateBytes []byte) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("%w: %s", errInvalidPredicateBytes, err)
 	}
-	warpMessage, err := warp.ParseMessage(unpackedPredicateBytes)
+	warpMessage, err := warp.ParseEnvelope(unpackedPredicateBytes)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %s", errInvalidWarpMsg, err)
 	}
-	_, err = payload.ParsePayload(warpMessage.UnsignedMessage.Payload)
+	_, err = payload.ParsePayload(warpMessage.Message.Payload)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %s", errInvalidWarpMsgPayload, err)
 	}
 
-	// Type assert to BitSetSignature to get number of signers
-	bitSetSig, ok := warpMessage.Signature.(*warp.BitSetSignature)
-	if !ok {
-		return 0, fmt.Errorf("%w: signature is not a BitSetSignature", errCannotGetNumSigners)
-	}
-	numSigners := uint64(bitSetSig.Signers.Len())
+	// The Beam (BLS aggregate lane) is a concrete field post-ZAP; count signers.
+	numSigners := uint64(warpMessage.Beam.Signers.Len())
 	if numSigners == 0 {
 		return 0, fmt.Errorf("%w: no signers in bit set", errCannotGetNumSigners)
 	}
@@ -199,7 +196,7 @@ func (c *Config) VerifyPredicate(predicateContext *precompileconfig.PredicateCon
 	}
 
 	// Note: PredicateGas should be called before VerifyPredicate, so we should never reach an error case here.
-	warpMsg, err := warp.ParseMessage(unpackedPredicateBytes)
+	warpMsg, err := warp.ParseEnvelope(unpackedPredicateBytes)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errCannotParseWarpMsg, err)
 	}
@@ -216,7 +213,7 @@ func (c *Config) VerifyPredicate(predicateContext *precompileconfig.PredicateCon
 	}
 
 	// Get the source chain ID from the warp message
-	sourceChainID := warpMsg.UnsignedMessage.SourceChainID
+	sourceChainID := warpMsg.Message.SourceChainID
 
 	// Get network ID from validator state for the source chain
 	sourceNetworkID, err := validatorState.GetNetworkID(sourceChainID)
@@ -318,29 +315,105 @@ func (c *Config) VerifyPredicate(predicateContext *precompileconfig.PredicateCon
 		return bytes.Compare(canonicalValidators[i].PublicKeyBytes, canonicalValidators[j].PublicKeyBytes) < 0
 	})
 
-	// Get signature
-	bitSetSig, ok := warpMsg.Signature.(*warp.BitSetSignature)
-	if !ok {
-		return fmt.Errorf("%w: signature is not a BitSetSignature", errCannotGetNumSigners)
-	}
+	// The Beam (BLS aggregate lane) is a concrete field post-ZAP.
+	beam := warpMsg.Beam
 
 	// Calculate signed weight using canonical validators (with aggregated weights)
-	signedWeight, err := bitSetSig.GetSignedWeight(canonicalValidators)
+	signedWeight, err := beamSignedWeight(beam, canonicalValidators)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errFailedVerification, err)
 	}
 
-	// Verify quorum
+	// Verify quorum. NOTE: totalWeight is the weight of ALL source validators
+	// (including those without a BLS public key) — the correct quorum
+	// denominator. This is why the precompile cannot route through
+	// warp.VerifyEnvelope, whose GetCanonicalValidatorSet both rejects the
+	// shared-public-key aggregation done above and excludes keyless validators
+	// from the denominator.
 	err = warp.VerifyWeight(signedWeight, totalWeight, quorumNumerator, WarpQuorumDenominator)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errFailedVerification, err)
 	}
 
-	// Verify the BLS signature using canonical validators
-	err = bitSetSig.Verify(warpMsg.UnsignedMessage.Bytes(), canonicalValidators)
+	// Verify the BLS Beam over the ZAP digest D = warpMsg.Message.ID(). The Beam
+	// signs warp.BeamSigningBytes(D), authenticating the entire Message
+	// (network ID, source chain, PQ lineage, payload) — not stale RLP bytes.
+	err = verifyBeam(beam, warpMsg.Message.ID(), canonicalValidators)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errFailedVerification, err)
 	}
 
+	return nil
+}
+
+// beamSignedWeight returns the total weight of the canonical validators whose
+// bit is set in the Beam's signer bitset. It mirrors the warp package's
+// internal (unexported) signedWeight; the precompile needs it directly because
+// it supplies its own canonical set (shared-public-key validators aggregated
+// by weight) which warp.GetCanonicalValidatorSet would reject.
+func beamSignedWeight(beam warp.BitSetSignature, validators []*warp.Validator) (uint64, error) {
+	signers := beam.Signers
+	if signers.HighestSetBit() > len(validators) {
+		return 0, fmt.Errorf("signer index %d exceeds validator count %d", signers.HighestSetBit()-1, len(validators))
+	}
+	var weight uint64
+	for i := 0; i < signers.BitLen(); i++ {
+		if !signers.Contains(i) {
+			continue
+		}
+		if i >= len(validators) {
+			return 0, fmt.Errorf("signer index %d exceeds validator count %d", i, len(validators))
+		}
+		newWeight, overflow := math.SafeAdd(weight, validators[i].Weight)
+		if overflow {
+			return 0, errors.New("weight overflow")
+		}
+		weight = newWeight
+	}
+	return weight, nil
+}
+
+// verifyBeam checks the Beam BLS aggregate over warp.BeamSigningBytes(d),
+// aggregating the public keys of the canonical validators selected by the
+// signer bitset. It mirrors the warp package's internal (unexported) verify
+// over the exported digest, for the same reason as beamSignedWeight.
+func verifyBeam(beam warp.BitSetSignature, d ids.ID, validators []*warp.Validator) error {
+	signers := beam.Signers
+	if signers.Len() == 0 {
+		return errors.New("no signers")
+	}
+	if signers.HighestSetBit() > len(validators) {
+		return fmt.Errorf("signer index %d exceeds validator count %d", signers.HighestSetBit()-1, len(validators))
+	}
+
+	pks := make([]*bls.PublicKey, 0, signers.Len())
+	for i := 0; i < signers.BitLen(); i++ {
+		if !signers.Contains(i) {
+			continue
+		}
+		if i >= len(validators) {
+			return fmt.Errorf("signer index %d exceeds validator count %d", i, len(validators))
+		}
+		pk := validators[i].PublicKey
+		if pk == nil {
+			return fmt.Errorf("validator %d has nil public key", i)
+		}
+		pks = append(pks, pk)
+	}
+	if len(pks) == 0 {
+		return errors.New("no valid signers")
+	}
+
+	aggPK, err := bls.AggregatePublicKeys(pks)
+	if err != nil {
+		return fmt.Errorf("failed to aggregate public keys: %w", err)
+	}
+	sig, err := bls.SignatureFromBytes(beam.Signature[:])
+	if err != nil {
+		return fmt.Errorf("failed to parse signature: %w", err)
+	}
+	if !bls.Verify(aggPK, sig, warp.BeamSigningBytes(d)) {
+		return warp.ErrInvalidSignature
+	}
 	return nil
 }
