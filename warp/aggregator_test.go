@@ -30,7 +30,7 @@ func newMockSignatureGetter() *mockSignatureGetter {
 	}
 }
 
-func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
+func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, msg *warp.Message) ([]byte, error) {
 	if err, ok := m.errors[nodeID]; ok {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (m *mockSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeI
 	}
 	// Sign with secret key if available
 	if sk, ok := m.secretKeys[nodeID]; ok {
-		sig, err := sk.Sign(warp.BeamSigningBytes(unsignedMessage.ID()))
+		sig, err := sk.Sign(warp.BeamSigningBytes(msg.ID()))
 		if err != nil {
 			return nil, err
 		}
@@ -88,13 +88,13 @@ func TestSignatureAggregator_AggregateSignatures(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
+	msg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Test successful aggregation with 67% quorum
 	signedMsgBytes, err := aggregator.AggregateSignatures(
 		context.Background(),
-		unsignedMsg,
+		msg,
 		validators,
 		67, // 67%
 		100,
@@ -182,13 +182,13 @@ func TestSignatureAggregator_InsufficientQuorum(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
+	msg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Try to aggregate with 67% quorum - should fail (only 1/3 validators available)
 	_, err = aggregator.AggregateSignatures(
 		context.Background(),
-		unsignedMsg,
+		msg,
 		validators,
 		67,
 		100,
@@ -207,13 +207,13 @@ func TestSignatureAggregator_NoValidators(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
+	msg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	// Empty validator set
 	_, err = aggregator.AggregateSignatures(
 		context.Background(),
-		unsignedMsg,
+		msg,
 		[]*ValidatorInfo{},
 		67,
 		100,
@@ -251,12 +251,12 @@ func TestSignatureAggregator_AllValidatorsFail(t *testing.T) {
 	sourceChainID := ids.GenerateTestID()
 	payload := []byte("test payload")
 
-	unsignedMsg, err := warp.NewMessage(networkID, sourceChainID, payload)
+	msg, err := warp.NewMessage(networkID, sourceChainID, payload)
 	require.NoError(err)
 
 	_, err = aggregator.AggregateSignatures(
 		context.Background(),
-		unsignedMsg,
+		msg,
 		validators,
 		67,
 		100,

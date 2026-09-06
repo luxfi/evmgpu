@@ -107,7 +107,7 @@ func TestSendWarpMessage(t *testing.T) {
 		sendWarpMessagePayload,
 	)
 	require.NoError(t, err)
-	unsignedWarpMessage, err := warp.NewMessage(
+	msg, err := warp.NewMessage(
 		context.GetNetworkID(defaultConsensusCtx),
 		blockchainID,
 		sendWarpMessageAddressedPayload.Bytes(),
@@ -151,7 +151,7 @@ func TestSendWarpMessage(t *testing.T) {
 			SuppliedGas: SendWarpMessageGasCost + uint64(len(sendWarpMessageInput[4:])*int(SendWarpMessageGasCostPerByte)),
 			ReadOnly:    false,
 			ExpectedRes: func() []byte {
-				bytes, err := PackSendWarpMessageOutput(common.Hash(unsignedWarpMessage.ID()))
+				bytes, err := PackSendWarpMessageOutput(common.Hash(msg.ID()))
 				if err != nil {
 					panic(err)
 				}
@@ -166,21 +166,21 @@ func TestSendWarpMessage(t *testing.T) {
 					[]common.Hash{
 						WarpABI.Events["SendWarpMessage"].ID,
 						common.BytesToHash(callerAddr[:]),
-						common.Hash(unsignedWarpMessage.ID()),
+						common.Hash(msg.ID()),
 					},
 					log.Topics,
 					WarpABI.Events["SendWarpMessage"].ID,
 				)
 
-				unsignedWarpMsg, err := UnpackSendWarpEventDataToMessage(log.Data)
+				unpacked, err := UnpackSendWarpEventDataToMessage(log.Data)
 				require.NoError(t, err)
-				parsedPayload, err := payload.ParsePayload(unsignedWarpMsg.Payload)
+				parsedPayload, err := payload.ParsePayload(unpacked.Payload)
 				require.NoError(t, err)
 				addressedPayload, ok := parsedPayload.(*payload.AddressedCall)
 				require.True(t, ok, "payload should be AddressedCall")
 
 				require.Equal(t, common.BytesToAddress(addressedPayload.SourceAddress), callerAddr)
-				require.Equal(t, unsignedWarpMsg.SourceChainID, blockchainID)
+				require.Equal(t, unpacked.SourceChainID, blockchainID)
 				require.Equal(t, addressedPayload.Payload, sendWarpMessagePayload)
 			},
 		},
@@ -201,9 +201,9 @@ func TestGetVerifiedWarpMessage(t *testing.T) {
 		packagedPayloadBytes,
 	)
 	require.NoError(t, err)
-	unsignedWarpMsg, err := warp.NewMessage(networkID, sourceChainID, addressedPayload.Bytes())
+	msg, err := warp.NewMessage(networkID, sourceChainID, addressedPayload.Bytes())
 	require.NoError(t, err)
-	warpMessage, err := warp.NewEnvelope(unsignedWarpMsg, warp.BitSetSignature{}, nil, nil) // Create message with empty signature for testing
+	warpMessage, err := warp.NewEnvelope(msg, warp.BitSetSignature{}, nil, nil) // Create message with empty signature for testing
 	require.NoError(t, err)
 	warpMessagePredicateBytes := predicate.PackPredicate(mustEnvBytes(warpMessage))
 	getVerifiedWarpMsg, err := PackGetVerifiedWarpMessage(0)
@@ -407,9 +407,9 @@ func TestGetVerifiedWarpMessage(t *testing.T) {
 			Caller:  callerAddr,
 			InputFn: func(t testing.TB) []byte { return getVerifiedWarpMsg },
 			Predicates: func() [][]byte {
-				unsignedMessage, err := warp.NewMessage(networkID, sourceChainID, []byte{1, 2, 3}) // Invalid addressed payload
+				invalidMsg, err := warp.NewMessage(networkID, sourceChainID, []byte{1, 2, 3}) // Invalid addressed payload
 				require.NoError(t, err)
-				warpMessage, err := warp.NewEnvelope(unsignedMessage, warp.BitSetSignature{}, nil, nil)
+				warpMessage, err := warp.NewEnvelope(invalidMsg, warp.BitSetSignature{}, nil, nil)
 				require.NoError(t, err)
 
 				return [][]byte{predicate.PackPredicate(mustEnvBytes(warpMessage))}
@@ -465,9 +465,9 @@ func TestGetVerifiedWarpBlockHash(t *testing.T) {
 	blockHash := ids.GenerateTestID()
 	blockHashPayload, err := payload.NewHash(blockHash[:])
 	require.NoError(t, err)
-	unsignedWarpMsg, err := warp.NewMessage(networkID, sourceChainID, blockHashPayload.Bytes())
+	msg, err := warp.NewMessage(networkID, sourceChainID, blockHashPayload.Bytes())
 	require.NoError(t, err)
-	warpMessage, err := warp.NewEnvelope(unsignedWarpMsg, warp.BitSetSignature{}, nil, nil) // Create message with empty signature for testing
+	warpMessage, err := warp.NewEnvelope(msg, warp.BitSetSignature{}, nil, nil) // Create message with empty signature for testing
 	require.NoError(t, err)
 	warpMessagePredicateBytes := predicate.PackPredicate(mustEnvBytes(warpMessage))
 	getVerifiedWarpBlockHash, err := PackGetVerifiedWarpBlockHash(0)
@@ -668,9 +668,9 @@ func TestGetVerifiedWarpBlockHash(t *testing.T) {
 			Caller:  callerAddr,
 			InputFn: func(t testing.TB) []byte { return getVerifiedWarpBlockHash },
 			Predicates: func() [][]byte {
-				unsignedMessage, err := warp.NewMessage(networkID, sourceChainID, []byte{1, 2, 3}) // Invalid block hash payload
+				invalidMsg, err := warp.NewMessage(networkID, sourceChainID, []byte{1, 2, 3}) // Invalid block hash payload
 				require.NoError(t, err)
-				warpMessage, err := warp.NewEnvelope(unsignedMessage, warp.BitSetSignature{}, nil, nil)
+				warpMessage, err := warp.NewEnvelope(invalidMsg, warp.BitSetSignature{}, nil, nil)
 				require.NoError(t, err)
 
 				return [][]byte{predicate.PackPredicate(mustEnvBytes(warpMessage))}
@@ -719,7 +719,7 @@ func TestGetVerifiedWarpBlockHash(t *testing.T) {
 }
 
 func TestPackEvents(t *testing.T) {
-	t.Skip("MUST-SKIP: References undefined variable unsignedMsg at line 734")
+	t.Skip("MUST-SKIP: References undefined variable msg at line 734")
 	sourceChainID := ids.GenerateTestID()
 	sourceAddress := common.HexToAddress("0x0123")
 	payloadData := []byte("mcsorley")
@@ -731,7 +731,7 @@ func TestPackEvents(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	unsignedWarpMessage, err := warp.NewMessage(
+	msg, err := warp.NewMessage(
 		networkID,
 		sourceChainID,
 		addressedPayload.Bytes(),
@@ -740,12 +740,12 @@ func TestPackEvents(t *testing.T) {
 
 	_, data, err := PackSendWarpMessageEvent(
 		sourceAddress,
-		common.Hash(unsignedMsg.ID()),
-		unsignedWarpMessage.Bytes(),
+		common.Hash(msg.ID()),
+		msg.Bytes(),
 	)
 	require.NoError(t, err)
 
 	unpacked, err := UnpackSendWarpEventDataToMessage(data)
 	require.NoError(t, err)
-	require.Equal(t, unsignedWarpMessage.Bytes(), unpacked.Bytes())
+	require.Equal(t, msg.Bytes(), unpacked.Bytes())
 }

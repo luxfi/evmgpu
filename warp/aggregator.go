@@ -22,7 +22,7 @@ var (
 // SignatureGetter fetches a signature for a warp message from a specific validator
 type SignatureGetter interface {
 	// GetSignature fetches a signature for the message from the given node
-	GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error)
+	GetSignature(ctx context.Context, nodeID ids.NodeID, msg *warp.Message) ([]byte, error)
 }
 
 // ValidatorInfo contains validator information for signature aggregation
@@ -49,7 +49,7 @@ func NewSignatureAggregator(signatureGetter SignatureGetter) *SignatureAggregato
 // Returns the signed message bytes if successful
 func (a *SignatureAggregator) AggregateSignatures(
 	ctx context.Context,
-	unsignedMessage *warp.Message,
+	msg *warp.Message,
 	validators []*ValidatorInfo,
 	quorumNum uint64,
 	quorumDen uint64,
@@ -87,7 +87,7 @@ func (a *SignatureAggregator) AggregateSignatures(
 		go func(validator *ValidatorInfo) {
 			defer wg.Done()
 
-			sigBytes, err := a.signatureGetter.GetSignature(ctx, validator.NodeID, unsignedMessage)
+			sigBytes, err := a.signatureGetter.GetSignature(ctx, validator.NodeID, msg)
 			if err != nil {
 				results <- sigResult{index: validator.Index, err: err}
 				return
@@ -101,7 +101,7 @@ func (a *SignatureAggregator) AggregateSignatures(
 
 			// Verify the validator's share against the Beam domain,
 			// warp.BeamSigningBytes(D), which is what warp.Signer signs.
-			if !bls.Verify(validator.PublicKey, sig, warp.BeamSigningBytes(unsignedMessage.ID())) {
+			if !bls.Verify(validator.PublicKey, sig, warp.BeamSigningBytes(msg.ID())) {
 				results <- sigResult{index: validator.Index, err: errors.New("signature verification failed")}
 				return
 			}
@@ -160,7 +160,7 @@ func (a *SignatureAggregator) AggregateSignatures(
 	}
 
 	// Wrap the message and its Beam in a signed envelope
-	signedMessage, err := warp.NewEnvelope(unsignedMessage, beam, nil, nil)
+	signedMessage, err := warp.NewEnvelope(msg, beam, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create signed envelope: %w", err)
 	}
@@ -192,8 +192,8 @@ func NewLocalSignatureGetter(backend Backend) *LocalSignatureGetter {
 }
 
 // GetSignature gets a signature from the local backend (this node)
-func (g *LocalSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
-	return g.backend.GetMessageSignature(ctx, unsignedMessage)
+func (g *LocalSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, msg *warp.Message) ([]byte, error) {
+	return g.backend.GetMessageSignature(ctx, msg)
 }
 
 // NetworkSignatureGetter implements SignatureGetter by fetching from network peers
@@ -213,9 +213,9 @@ func NewNetworkSignatureGetter(client RequestClient) *NetworkSignatureGetter {
 }
 
 // GetSignature fetches a signature from a network peer
-func (g *NetworkSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, unsignedMessage *warp.Message) ([]byte, error) {
+func (g *NetworkSignatureGetter) GetSignature(ctx context.Context, nodeID ids.NodeID, msg *warp.Message) ([]byte, error) {
 	// Encode the signature request
-	request := unsignedMessage.Bytes()
+	request := msg.Bytes()
 
 	// Send request to peer
 	response, err := g.client.SendRequest(ctx, nodeID, request)

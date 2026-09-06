@@ -265,7 +265,7 @@ func sendWarpMessage(accessibleState contract.AccessibleState, caller common.Add
 	if err != nil {
 		return nil, remainingGas, err
 	}
-	unsignedWarpMessage, err := warp.NewMessage(
+	msg, err := warp.NewMessage(
 		consensuscontext.GetNetworkID(ctx),
 		sourceChainID,
 		addressedPayload.Bytes(),
@@ -277,8 +277,8 @@ func sendWarpMessage(accessibleState contract.AccessibleState, caller common.Add
 	// Add a log to be handled if this action is finalized.
 	topics, data, err := PackSendWarpMessageEvent(
 		sourceAddress,
-		common.Hash(unsignedWarpMessage.ID()),
-		unsignedWarpMessage.Bytes(),
+		common.Hash(msg.ID()),
+		msg.Bytes(),
 	)
 	if err != nil {
 		return nil, remainingGas, err
@@ -290,7 +290,7 @@ func sendWarpMessage(accessibleState contract.AccessibleState, caller common.Add
 		BlockNumber: accessibleState.GetBlockContext().Number().Uint64(),
 	})
 
-	packed, err := PackSendWarpMessageOutput(common.Hash(unsignedWarpMessage.ID()))
+	packed, err := PackSendWarpMessageOutput(common.Hash(msg.ID()))
 	if err != nil {
 		return nil, remainingGas, err
 	}
@@ -300,8 +300,8 @@ func sendWarpMessage(accessibleState contract.AccessibleState, caller common.Add
 }
 
 // PackSendWarpMessageEvent packs the given arguments into SendWarpMessage events including topics and data.
-func PackSendWarpMessageEvent(sourceAddress common.Address, unsignedMessageID common.Hash, unsignedMessageBytes []byte) ([]common.Hash, []byte, error) {
-	return WarpABI.PackEvent("SendWarpMessage", sourceAddress, unsignedMessageID, unsignedMessageBytes)
+func PackSendWarpMessageEvent(sourceAddress common.Address, unsignedMessageID common.Hash, msgBytes []byte) ([]common.Hash, []byte, error) {
+	return WarpABI.PackEvent("SendWarpMessage", sourceAddress, unsignedMessageID, msgBytes)
 }
 
 // UnpackSendWarpEventDataToMessage attempts to unpack event [data] as warp.Message.

@@ -29,12 +29,12 @@ func (s *LocalSigner) Sign(msg []byte) ([]byte, error) {
 	return bls.SignatureToBytes(sig), nil
 }
 
-// SignUnsignedMessage signs a warp message over the Beam domain,
+// SignMessage signs a warp message over the Beam domain,
 // warp.BeamSigningBytes(D), where D is the message ID. This is the domain
 // warp.Signer signs and warp.VerifyEnvelope checks; signing the bare
 // canonical bytes would produce a Beam no receiver accepts.
-func (s *LocalSigner) SignUnsignedMessage(unsignedMsg *warp.Message) ([]byte, error) {
-	return s.Sign(warp.BeamSigningBytes(unsignedMsg.ID()))
+func (s *LocalSigner) SignMessage(msg *warp.Message) ([]byte, error) {
+	return s.Sign(warp.BeamSigningBytes(msg.ID()))
 }
 
 // GetPublicKey returns the public key

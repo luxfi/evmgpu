@@ -20,6 +20,6 @@ func NewSignerAdapter(signer *LocalSigner) *SignerAdapter {
 }
 
 // Sign implements the warp.Signer interface
-func (a *SignerAdapter) Sign(unsignedMsg *warp.Message) ([]byte, error) {
-	return a.signer.SignUnsignedMessage(unsignedMsg)
+func (a *SignerAdapter) Sign(msg *warp.Message) ([]byte, error) {
+	return a.signer.SignMessage(msg)
 }
