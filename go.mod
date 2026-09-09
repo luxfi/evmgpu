@@ -1,6 +1,6 @@
 module github.com/luxfi/evmgpu
 
-go 1.26.4
+go 1.26.8
 
 exclude github.com/luxfi/geth v1.16.1
 
