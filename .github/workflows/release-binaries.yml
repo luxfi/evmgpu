@@ -12,7 +12,7 @@ env:
 
 jobs:
   create-release:
-    runs-on: lux-build-amd64
+    runs-on: linux-amd64
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
@@ -29,7 +29,7 @@ jobs:
 
   release-linux-amd64:
     needs: create-release
-    runs-on: lux-build-amd64
+    runs-on: linux-amd64
     steps:
       - uses: actions/checkout@v6
       - name: Checkout vm dependency
@@ -61,7 +61,7 @@ jobs:
 
   release-linux-arm64:
     needs: create-release
-    runs-on: lux-build-amd64
+    runs-on: linux-amd64
     steps:
       - uses: actions/checkout@v6
       - name: Checkout vm dependency
