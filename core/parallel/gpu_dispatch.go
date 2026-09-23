@@ -71,9 +71,11 @@ type GPUEVMDispatcher struct {
 	execute func(backend uint8, batch *gpuBatch) ([]GPUEVMResult, error)
 }
 
-// Available returns true if a GPU backend was detected.
+// Available returns true if a GPU backend was detected and the dispatcher can
+// call it: one without a device call (a library of another ABI, or the zero
+// value) is not.
 func (d *GPUEVMDispatcher) Available() bool {
-	return d.backend >= 2 // Metal=2, CUDA=3
+	return d.execute != nil && d.backend >= 2 // Metal=2, CUDA=3
 }
 
 // Backend returns the name of the active backend.

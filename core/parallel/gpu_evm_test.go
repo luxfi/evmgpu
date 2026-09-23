@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These run against the linked library and hold it to go_bridge.h (ABI 6).
+// These run against the linked library and hold it to go_bridge.h (ABI 7).
 
 // transferBatch is n signed plain transfers from one funded sender, with the
 // state getter and header the dispatcher needs.
@@ -78,6 +78,27 @@ func TestGPUEVMDispatcher_ExecuteBlock_SimpleTransfers(t *testing.T) {
 		require.True(t, r.Success, "tx %d should succeed", i)
 		require.Equal(t, ethparams.TxGas, r.GasUsed, "tx %d is a plain transfer", i)
 	}
+}
+
+// The linked library speaks the ABI this package is written to.
+func TestTheLibrarySpeaksABI7(t *testing.T) {
+	require.Equal(t, uint32(7), abiVersion)
+	require.Equal(t, abiVersion, libraryABI, "the loaded libevm-gpu reports another ABI")
+}
+
+// A library of another ABI is sent nothing: its dispatcher is not available,
+// and a batch a device would run is declined.
+func TestALibraryOfAnotherABIDisablesTheDispatcher(t *testing.T) {
+	loaded := libraryABI
+	t.Cleanup(func() { libraryABI = loaded })
+	libraryABI = abiVersion - 1
+
+	d := NewGPUEVMDispatcher()
+	require.False(t, d.Available())
+	config, header, txs, senders, getter := transferBatch(t, 1)
+	results, err := d.ExecuteBlock(config, header, txs, senders, getter)
+	require.ErrorIs(t, err, ErrGPUDeclined)
+	require.Nil(t, results)
 }
 
 func TestGPUEVMDispatcher_ExecuteBlock_Empty(t *testing.T) {

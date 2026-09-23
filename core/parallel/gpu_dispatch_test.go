@@ -306,8 +306,12 @@ func TestTheBatchCarriesTheStateTheContractAsks(t *testing.T) {
 	}
 }
 
-// A dispatcher with no device call declines rather than calling nil.
+// A dispatcher with no device call is not available, and declines rather than
+// calling nil.
 func TestAZeroDispatcherDeclines(t *testing.T) {
+	if (&GPUEVMDispatcher{backend: 2}).Available() {
+		t.Error("a dispatcher with no device call says it is available")
+	}
 	config := ethparams.TestChainConfig
 	header := blockHeader()
 	getter, _ := productionSeams(newTestState(t), config, header)

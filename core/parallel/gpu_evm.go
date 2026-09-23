@@ -35,8 +35,21 @@ import (
 	"github.com/luxfi/geth/log"
 )
 
+// abiVersion is the go_bridge.h ABI executeOnDevice is written to: 7, in which
+// ok says whether the result is the block's. A version 6 library answers ok=1
+// for results that are not.
+const abiVersion uint32 = 7
+
+// The header this builds against names the same ABI, or this file does not
+// compile: each line fails when EVM_GPU_ABI_VERSION is smaller (the first) or
+// larger (the second) than abiVersion.
+var (
+	_ [abiVersion - C.EVM_GPU_ABI_VERSION]struct{}
+	_ [C.EVM_GPU_ABI_VERSION - abiVersion]struct{}
+)
+
 // The C structs executeOnDevice fills and reads, at the sizes go_bridge.h
-// (ABI 6) gives them on LP64. A header that adds, drops or widens a field
+// (ABI 7) gives them on LP64. A header that adds, drops or widens a field
 // changes a size, and then this file does not compile until it has been read
 // against the new header: a field it never sets would otherwise cross as
 // zero. Each pair fails when the size is larger (the first) or smaller (the
@@ -52,19 +65,28 @@ var (
 	_ [392 - unsafe.Sizeof(C.CBlockContext{})]struct{}
 )
 
-// init refuses a loaded library whose ABI is not the one go_bridge.h, as this
-// file was compiled against it, names: the structs above would be read at
-// another layout.
+// libraryABI is the ABI the loaded library reports (gpu_abi_version), read
+// once in init. The library a binary loads at run time need not be the one
+// whose header it was built against.
+var libraryABI uint32
+
 func init() {
-	if got, want := uint32(C.gpu_abi_version()), uint32(C.EVM_GPU_ABI_VERSION); got != want {
-		panic(fmt.Sprintf("parallel: loaded libevm-gpu reports ABI v%d, go_bridge.h is v%d; rebuild against one library", got, want))
-	}
+	libraryABI = uint32(C.gpu_abi_version())
 }
 
 // NewGPUEVMDispatcher creates a dispatcher that routes eligible transactions
 // to the C++ GPU kernel. Auto-detects the best available backend.
+//
+// A loaded library of another ABI lays the structs out and means ok
+// differently, so it is sent nothing: the dispatcher has no device call, is
+// not Available, and declines every batch, and every block runs on the CPU.
 func NewGPUEVMDispatcher() *GPUEVMDispatcher {
 	backend := uint8(C.gpu_auto_detect_backend())
+	if libraryABI != abiVersion {
+		log.Warn("GPU EVM dispatcher disabled: the loaded library speaks another ABI",
+			"library", libraryABI, "reads", abiVersion)
+		return &GPUEVMDispatcher{backend: backend}
+	}
 	log.Info("GPU EVM dispatcher initialized",
 		"backend", gpuBackendName(backend),
 	)
@@ -76,7 +98,8 @@ func NewGPUEVMDispatcher() *GPUEVMDispatcher {
 //
 // ok=0 names no gas or status the caller may use (every status reads
 // EVM_GPU_TX_ERROR, and the arrays may be NULL), so it comes back as
-// ErrGPUDeclined and nothing in it is read.
+// ErrGPUDeclined and nothing in it is read; so does a result of another ABI,
+// whose ok means something else.
 func executeOnDevice(backend uint8, b *gpuBatch) ([]GPUEVMResult, error) {
 	n := len(b.txs)
 	if n == 0 {
@@ -138,7 +161,7 @@ func executeOnDevice(backend uint8, b *gpuBatch) ([]GPUEVMResult, error) {
 	runtime.KeepAlive(cTxs)
 	runtime.KeepAlive(cAccts)
 
-	if result.ok == 0 {
+	if uint32(result.abi_version) != abiVersion || result.ok == 0 {
 		return nil, ErrGPUDeclined
 	}
 	if int(result.num_txs) != n || result.gas_used == nil || result.status == nil {
