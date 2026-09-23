@@ -142,7 +142,12 @@ func shapeGPUBatch(
 			Coinbase:  header.Coinbase,
 		},
 	}
-	copy(b.ctx.Prevrandao[:], header.MixDigest[:])
+	// PREVRANDAO (0x44) is the header's difficulty as a 32-byte word:
+	// NewEVMBlockContext sets Random to it from Shanghai on, and DIFFICULTY
+	// before that answers the same number. A Lux header's MixDigest is zero.
+	if header.Difficulty != nil {
+		b.ctx.Prevrandao = common.BigToHash(header.Difficulty)
+	}
 
 	seen := make(map[common.Address]struct{}, 2*len(txs)+1)
 	add := func(addr common.Address) bool {

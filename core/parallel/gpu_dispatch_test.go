@@ -306,6 +306,36 @@ func TestTheBatchCarriesTheStateTheContractAsks(t *testing.T) {
 	}
 }
 
+// PREVRANDAO (0x44) is what the Go EVM answers for the header: its difficulty
+// as a 32-byte word, which NewEVMBlockContext makes Random from Shanghai on and
+// DIFFICULTY answers before it. The MixDigest, zero on a Lux header, is not it.
+func TestTheBatchPrevrandaoIsTheHeadersDifficulty(t *testing.T) {
+	config := ethparams.TestChainConfig
+	getter, _ := productionSeams(newTestState(t), config, blockHeader())
+	to := common.Address{0x11}
+	tx := types.NewTx(&types.LegacyTx{To: &to, Value: big.NewInt(1), Gas: ethparams.TxGas, GasPrice: big.NewInt(1)})
+
+	header := blockHeader()
+	header.Difficulty = big.NewInt(0x1234)
+	header.MixDigest = common.Hash{0xAB, 0xCD}
+	b, ok := shapeGPUBatch(config, header, []*types.Transaction{tx}, []common.Address{{0x01}}, getter)
+	if !ok {
+		t.Fatal("shapeGPUBatch declined a batch the wire carries")
+	}
+	if want := common.BigToHash(header.Difficulty); common.Hash(b.ctx.Prevrandao) != want {
+		t.Errorf("Prevrandao = %x, want the difficulty %x, not the MixDigest %x", b.ctx.Prevrandao, want, header.MixDigest)
+	}
+
+	header.Difficulty = nil
+	b, ok = shapeGPUBatch(config, header, []*types.Transaction{tx}, []common.Address{{0x01}}, getter)
+	if !ok {
+		t.Fatal("shapeGPUBatch declined a header without a difficulty")
+	}
+	if b.ctx.Prevrandao != ([32]byte{}) {
+		t.Errorf("a header without a difficulty gave Prevrandao %x, want zero", b.ctx.Prevrandao)
+	}
+}
+
 // A dispatcher with no device call is not available, and declines rather than
 // calling nil.
 func TestAZeroDispatcherDeclines(t *testing.T) {
