@@ -25,12 +25,10 @@ func init() {
 	gethparams.SetRulesHook(precompileHook)
 }
 
-// precompileHook populates Rules.Payload with the LuxPrecompileOverrider
+// precompileHook populates Rules.Payload with the LuxPrecompileOverrider,
+// which carries the chain config and timestamp these Rules were evaluated at:
+// params.GetRulesExtra reads them from there.
 func precompileHook(c *gethparams.ChainConfig, rules *gethparams.Rules, num *big.Int, isMerge bool, timestamp uint64) {
-	// Store context for GetRulesExtra to use
-	params.SetRulesContext(rules, c, timestamp)
-
-	// Set the payload to our PrecompileOverrider
 	rules.Payload = &LuxPrecompileOverrider{
 		chainConfig: c,
 		timestamp:   timestamp,
@@ -44,12 +42,25 @@ type LuxPrecompileOverrider struct {
 	timestamp   uint64
 }
 
+// RulesContext is the chain config and timestamp the Rules carrying this
+// overrider were evaluated at, which params.GetRulesExtra derives their Lux
+// rules from.
+func (o *LuxPrecompileOverrider) RulesContext() (*gethparams.ChainConfig, uint64) {
+	return o.chainConfig, o.timestamp
+}
+
 // PrecompileOverride returns the precompile at the given address if it's
 // an active Lux custom precompile.
+//
+// The enabled set is computed from this overrider's own chain config and
+// timestamp, set in precompileHook when the EVM's Rules were evaluated. The EVM
+// asks lazily, when a CALL targets the address, and other goroutines evaluate
+// Rules for other chains and times in between; deciding from o.timestamp makes
+// every replay of a given block see the same enabled set. params.ChainConfig is
+// a type alias of geth's ChainConfig, so o.chainConfig is passed directly.
 func (o *LuxPrecompileOverrider) PrecompileOverride(addr common.Address) (vm.PrecompiledContract, bool) {
-	// Get the extras rules to check active precompiles
-	rulesExtra := params.GetRulesExtra(gethparams.Rules{})
-	if !rulesExtra.IsPrecompileEnabled(addr) {
+	extrasRules := params.GetExtrasRules(gethparams.Rules{}, o.chainConfig, o.timestamp)
+	if cfg, ok := extrasRules.Precompiles[addr]; !ok || cfg.IsDisabled() {
 		return nil, false
 	}
 
