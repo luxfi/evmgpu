@@ -99,11 +99,15 @@ func NewGPUEVMDispatcher() *GPUEVMDispatcher {
 // ok=0 names no gas or status the caller may use (every status reads
 // EVM_GPU_TX_ERROR, and the arrays may be NULL), so it comes back as
 // ErrGPUDeclined and nothing in it is read; so does a result of another ABI,
-// whose ok means something else.
+// whose ok means something else. A loaded library of another ABI is sent
+// nothing.
 func executeOnDevice(backend uint8, b *gpuBatch) ([]GPUEVMResult, error) {
 	n := len(b.txs)
 	if n == 0 {
 		return nil, nil
+	}
+	if libraryABI != abiVersion {
+		return nil, ErrGPUDeclined
 	}
 
 	// No Go pointer is stored in any of these: no calldata or code crosses,
