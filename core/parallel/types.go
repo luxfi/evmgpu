@@ -298,10 +298,11 @@ type GPUDispatcher interface {
 // no contract creation, no calldata (which implies no CALL/CREATE/
 // DELEGATECALL in the execution trace).
 //
-// And nothing go_bridge.h's CGpuTx cannot carry: it has one price and no
-// access list, blob hashes, authorizations or tip. A tx with an access list
-// is charged for it, a blob or set-code tx for what it carries, and one whose
-// tip exceeds its fee cap is invalid, which only the Go EVM would see.
+// And nothing go_bridge.h's CGpuTx cannot carry: it has no access list, blob
+// hashes or authorizations. A tx with an access list is charged for it, and a
+// blob or set-code tx for what it carries. One whose tip exceeds its fee cap
+// is invalid (ErrTipAboveFeeCap): cevm declines it too, and the Go EVM says
+// why.
 func IsGPUEligible(tx *types.Transaction) bool {
 	if tx.To() == nil {
 		return false

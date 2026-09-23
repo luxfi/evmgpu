@@ -128,6 +128,28 @@ func TestGPUEVMDispatcher_AnUnfundedBatchIsDeclined(t *testing.T) {
 	require.Nil(t, results)
 }
 
+// A tx whose tip is above its fee cap is invalid (ErrTipAboveFeeCap). The wire
+// carries the tip, so the device sees it and declines, even for a batch that
+// did not come through IsGPUEligible. Before ABI 7 carried it, the device ran
+// the tx at its one price.
+func TestGPUEVMDispatcher_ATipAboveTheFeeCapIsDeclined(t *testing.T) {
+	d := NewGPUEVMDispatcher()
+	if !d.Available() {
+		t.Skip("no GPU backend")
+	}
+	config, header, txs, senders, getter := transferBatch(t, 1)
+	batch, ok := shapeGPUBatch(config, header, txs, senders, getter)
+	require.True(t, ok)
+	results, err := executeOnDevice(d.backend, batch)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	batch.txs[0].GasTipCap = batch.txs[0].GasFeeCap + 1
+	results, err = executeOnDevice(d.backend, batch)
+	require.ErrorIs(t, err, ErrGPUDeclined)
+	require.Nil(t, results)
+}
+
 // Benchmarks: CGo GPU dispatch for simple transfers.
 
 func BenchmarkGPUEVM_100Transfers(b *testing.B) {

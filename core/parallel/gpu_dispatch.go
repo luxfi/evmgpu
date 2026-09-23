@@ -21,13 +21,16 @@ var ErrGPUDeclined = errors.New("parallel: the GPU EVM declined the batch; the b
 
 // gpuTx is one transaction as go_bridge.h's CGpuTx carries it. Only plain
 // value transfers reach the GPU (IsGPUEligible), so there is no calldata and
-// no code, and every one has a recipient.
+// no code, and every one has a recipient. GasFeeCap and GasTipCap are its
+// maxFeePerGas and maxPriorityFeePerGas, both its gas price for a legacy or
+// access-list tx.
 type gpuTx struct {
-	From, To [20]byte
-	GasLimit uint64
-	Value    uint64
-	Nonce    uint64
-	GasPrice uint64
+	From, To  [20]byte
+	GasLimit  uint64
+	Value     uint64
+	Nonce     uint64
+	GasFeeCap uint64
+	GasTipCap uint64
 }
 
 // gpuAccount is one row of the state before the block, as CGpuStateAccount
@@ -169,20 +172,26 @@ func shapeGPUBatch(
 		if !ok {
 			return nil, false
 		}
-		// tx.GasPrice() is a dynamic-fee tx's fee cap: what the EVM's buy-gas
-		// balance check charges, and what cevm checks against the base fee.
-		price, ok := fitsUint64(tx.GasPrice())
+		// The fee cap and the tip: cevm charges the base fee and the tip,
+		// capped at the fee cap, as the EVM does, checks the sender's balance
+		// at the fee cap, and the fee cap against the base fee.
+		feeCap, ok := fitsUint64(tx.GasFeeCap())
+		if !ok {
+			return nil, false
+		}
+		tipCap, ok := fitsUint64(tx.GasTipCap())
 		if !ok {
 			return nil, false
 		}
 		to := *tx.To()
 		b.txs[i] = gpuTx{
-			From:     senders[i],
-			To:       to,
-			GasLimit: tx.Gas(),
-			Value:    value,
-			Nonce:    tx.Nonce(),
-			GasPrice: price,
+			From:      senders[i],
+			To:        to,
+			GasLimit:  tx.Gas(),
+			Value:     value,
+			Nonce:     tx.Nonce(),
+			GasFeeCap: feeCap,
+			GasTipCap: tipCap,
 		}
 		if !add(senders[i]) || !add(to) {
 			return nil, false

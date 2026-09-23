@@ -267,9 +267,12 @@ func TestTheBatchCarriesTheStateTheContractAsks(t *testing.T) {
 		t.Fatal("shapeGPUBatch declined a batch the wire carries")
 	}
 
-	want := gpuTx{From: from, To: to, GasLimit: ethparams.TxGas, Value: 7, Nonce: 3, GasPrice: 9}
+	// The fee cap and the tip both cross: cevm charges the base fee and the tip,
+	// capped at the fee cap. Before, the wire had one price, the fee cap, and
+	// cevm charged it whole.
+	want := gpuTx{From: from, To: to, GasLimit: ethparams.TxGas, Value: 7, Nonce: 3, GasFeeCap: 9, GasTipCap: 2}
 	if len(b.txs) != 2 || b.txs[0] != want || b.txs[1] != want {
-		t.Fatalf("txs = %+v, want two of %+v (the price is the fee cap)", b.txs, want)
+		t.Fatalf("txs = %+v, want two of %+v", b.txs, want)
 	}
 	if b.ctx.GasLimit != header.GasLimit || b.ctx.BaseFee != header.BaseFee.Uint64() ||
 		b.ctx.ChainID != config.ChainID.Uint64() || b.ctx.Number != header.Number.Uint64() ||

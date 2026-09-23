@@ -55,8 +55,8 @@ var (
 // zero. Each pair fails when the size is larger (the first) or smaller (the
 // second).
 var (
-	_ [unsafe.Sizeof(C.CGpuTx{}) - 112]struct{}
-	_ [112 - unsafe.Sizeof(C.CGpuTx{})]struct{}
+	_ [unsafe.Sizeof(C.CGpuTx{}) - 120]struct{}
+	_ [120 - unsafe.Sizeof(C.CGpuTx{})]struct{}
 	_ [unsafe.Sizeof(C.CGpuStateAccount{}) - 136]struct{}
 	_ [136 - unsafe.Sizeof(C.CGpuStateAccount{})]struct{}
 	_ [unsafe.Sizeof(C.CGpuBlockResult{}) - 88]struct{}
@@ -121,7 +121,8 @@ func executeOnDevice(backend uint8, b *gpuBatch) ([]GPUEVMResult, error) {
 		cTxs[i].gas_limit = C.uint64_t(t.GasLimit)
 		cTxs[i].value = C.uint64_t(t.Value)
 		cTxs[i].nonce = C.uint64_t(t.Nonce)
-		cTxs[i].gas_price = C.uint64_t(t.GasPrice)
+		cTxs[i].max_fee_per_gas = C.uint64_t(t.GasFeeCap)
+		cTxs[i].max_priority_fee_per_gas = C.uint64_t(t.GasTipCap)
 	}
 
 	var cctx C.CBlockContext
