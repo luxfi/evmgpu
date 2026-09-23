@@ -52,6 +52,15 @@ var (
 	_ [392 - unsafe.Sizeof(C.CBlockContext{})]struct{}
 )
 
+// init refuses a loaded library whose ABI is not the one go_bridge.h, as this
+// file was compiled against it, names: the structs above would be read at
+// another layout.
+func init() {
+	if got, want := uint32(C.gpu_abi_version()), uint32(C.EVM_GPU_ABI_VERSION); got != want {
+		panic(fmt.Sprintf("parallel: loaded libevm-gpu reports ABI v%d, go_bridge.h is v%d; rebuild against one library", got, want))
+	}
+}
+
 // NewGPUEVMDispatcher creates a dispatcher that routes eligible transactions
 // to the C++ GPU kernel. Auto-detects the best available backend.
 func NewGPUEVMDispatcher() *GPUEVMDispatcher {

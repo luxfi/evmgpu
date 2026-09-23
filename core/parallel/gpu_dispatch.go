@@ -88,6 +88,7 @@ func (d *GPUEVMDispatcher) Backend() string {
 // chain id wider than 64 bits, a transaction that is not eligible, a state
 // the getter cannot answer, or an account with code, whose bytes the state
 // getter does not give. Truncating any of them would run a different block.
+// A dispatcher with no device call (the zero value) declines everything.
 func (d *GPUEVMDispatcher) ExecuteBlock(
 	config *ethparams.ChainConfig,
 	header *types.Header,
@@ -99,7 +100,7 @@ func (d *GPUEVMDispatcher) ExecuteBlock(
 		return nil, nil
 	}
 	batch, ok := shapeGPUBatch(config, header, txs, senders, state)
-	if !ok {
+	if !ok || d.execute == nil {
 		return nil, ErrGPUDeclined
 	}
 	return d.execute(d.backend, batch)

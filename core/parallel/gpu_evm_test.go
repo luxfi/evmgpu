@@ -61,8 +61,8 @@ func TestGPUEVMDispatcher_Init(t *testing.T) {
 	t.Logf("GPU EVM backend: %s, available: %v", backend, d.Available())
 }
 
-// Plain transfers from a funded sender run on the device at 21000 gas each,
-// or come back declined. Never a result with something else in it.
+// Plain transfers from a funded sender run on the device at 21000 gas each.
+// A device that declines them runs nothing, and fails here.
 func TestGPUEVMDispatcher_ExecuteBlock_SimpleTransfers(t *testing.T) {
 	d := NewGPUEVMDispatcher()
 	if !d.Available() {
@@ -72,9 +72,6 @@ func TestGPUEVMDispatcher_ExecuteBlock_SimpleTransfers(t *testing.T) {
 	config, header, txs, senders, getter := transferBatch(t, numTxs)
 
 	results, err := d.ExecuteBlock(config, header, txs, senders, getter)
-	if errors.Is(err, ErrGPUDeclined) {
-		t.Skipf("the device declined the batch: %v", err)
-	}
 	require.NoError(t, err)
 	require.Len(t, results, numTxs)
 	for i, r := range results {

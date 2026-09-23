@@ -306,6 +306,19 @@ func TestTheBatchCarriesTheStateTheContractAsks(t *testing.T) {
 	}
 }
 
+// A dispatcher with no device call declines rather than calling nil.
+func TestAZeroDispatcherDeclines(t *testing.T) {
+	config := ethparams.TestChainConfig
+	header := blockHeader()
+	getter, _ := productionSeams(newTestState(t), config, header)
+	to := common.Address{0x11}
+	tx := types.NewTx(&types.LegacyTx{To: &to, Value: big.NewInt(1), Gas: ethparams.TxGas, GasPrice: big.NewInt(1)})
+	results, err := (&GPUEVMDispatcher{}).ExecuteBlock(config, header, []*types.Transaction{tx}, []common.Address{{0x01}}, getter)
+	if !errors.Is(err, ErrGPUDeclined) || results != nil {
+		t.Fatalf("zero dispatcher = (%v, %v), want ErrGPUDeclined", results, err)
+	}
+}
+
 // A plain transfer is eligible; anything CGpuTx cannot carry is not.
 func TestIsGPUEligible(t *testing.T) {
 	to := common.Address{0x12}
