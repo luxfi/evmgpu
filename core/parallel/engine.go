@@ -100,15 +100,15 @@ func (e *Engine) ExecuteBlock(
 
 	// GPU opcode dispatch: classify and pre-execute eligible transactions.
 	// GPU-eligible txs (simple transfers) are dispatched to the C++ Metal/CUDA
-	// kernel. Their results are injected directly into the results array.
-	// Non-eligible txs proceed through Block-STM as before.
-	gpuExecuted := make(map[uint32]bool)
+	// kernel and what it answers is counted; Block-STM still executes every
+	// tx, so no GPU result reaches a receipt. A batch the GPU declines — one
+	// go_bridge.h answers ok=0 for, or one its 64-bit wire cannot carry — has
+	// no result, and the block runs on the sequential path.
 	if e.gpuEVM != nil && e.gpuEVM.Available() {
 		signer := types.MakeSigner(config, header.Number, header.Time)
 
 		var eligibleTxs []*types.Transaction
 		var eligibleSenders []common.Address
-		var eligibleIdxs []uint32
 
 		for i := uint32(0); i < blockSize; i++ {
 			tx := txs[i]
@@ -117,7 +117,6 @@ func (e *Engine) ExecuteBlock(
 				if sErr == nil {
 					eligibleTxs = append(eligibleTxs, tx)
 					eligibleSenders = append(eligibleSenders, from)
-					eligibleIdxs = append(eligibleIdxs, i)
 				}
 			}
 		}
@@ -125,18 +124,18 @@ func (e *Engine) ExecuteBlock(
 		e.stats.GPUEligible.Add(uint64(len(eligibleTxs)))
 
 		if len(eligibleTxs) > 0 {
-			gpuResults, gpuErr := e.gpuEVM.ExecuteBlock(signer, eligibleTxs, eligibleSenders)
-			if gpuErr == nil {
-				for j, idx := range eligibleIdxs {
-					if j < len(gpuResults) && gpuResults[j].Success {
-						gpuExecuted[idx] = true
-						e.stats.GPUExecuted.Add(1)
-					} else {
-						e.stats.GPUFallback.Add(1)
-					}
-				}
-			} else {
+			gpuResults, gpuErr := e.gpuEVM.ExecuteBlock(config, header, eligibleTxs, eligibleSenders, stateGetter)
+			if gpuErr != nil || len(gpuResults) != len(eligibleTxs) {
 				e.stats.GPUFallback.Add(uint64(len(eligibleTxs)))
+				e.stats.FellBack = true
+				return e.executeSequential(config, header, txs, stateGetter, vmFactory)
+			}
+			for _, r := range gpuResults {
+				if r.Success {
+					e.stats.GPUExecuted.Add(1)
+				} else {
+					e.stats.GPUFallback.Add(1)
+				}
 			}
 		}
 	}

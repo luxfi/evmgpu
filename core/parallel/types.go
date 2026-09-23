@@ -18,6 +18,7 @@ import (
 
 	"github.com/luxfi/geth/common"
 	"github.com/luxfi/geth/core/types"
+	ethparams "github.com/luxfi/geth/params"
 )
 
 // =============================================================================
@@ -34,6 +35,11 @@ const (
 	LocationNonce    LocationType = 1 // Account nonce only
 	LocationCodeHash LocationType = 2 // Contract code hash
 	LocationStorage  LocationType = 3 // Storage slot
+
+	// LocationStorageRoot is an account's storage trie root before the block.
+	// Only read, for the GPU dispatcher's state rows (go_bridge.h asks for
+	// each account's storage root); no transaction writes it.
+	LocationStorageRoot LocationType = 4
 )
 
 // MemoryLocation uniquely identifies a piece of EVM state.
@@ -86,10 +92,11 @@ const (
 
 // MemoryValue is the value stored in the multi-version data structure.
 // Each LocationType uses only the relevant field:
-//   - LocationBalance  → Balance
-//   - LocationNonce    → Nonce
-//   - LocationCodeHash → Storage (code hash stored as hash)
-//   - LocationStorage  → Storage
+//   - LocationBalance     → Balance
+//   - LocationNonce       → Nonce
+//   - LocationCodeHash    → Storage (code hash stored as hash)
+//   - LocationStorage     → Storage
+//   - LocationStorageRoot → Storage (storage root stored as hash)
 type MemoryValue struct {
 	Type    ValueType
 	Balance common.Hash // 32 bytes: absolute or delta (LocationBalance only)
@@ -269,17 +276,32 @@ type GPUEVMResult struct {
 }
 
 // GPUDispatcher is the interface for GPU EVM opcode dispatch.
-// Implemented by GPUEVMDispatcher (gpu build tag) or nil (CPU-only).
+// Implemented by GPUEVMDispatcher, or nil (CPU-only).
+//
+// ExecuteBlock runs the eligible transactions of a block, given with their
+// senders, against the state before the block. It returns ErrGPUDeclined for
+// a batch the GPU does not run; any error means the batch has no result.
 type GPUDispatcher interface {
 	Available() bool
 	Backend() string
-	ExecuteBlock(signer types.Signer, txs []*types.Transaction, senders []common.Address) ([]GPUEVMResult, error)
+	ExecuteBlock(
+		config *ethparams.ChainConfig,
+		header *types.Header,
+		txs []*types.Transaction,
+		senders []common.Address,
+		state StateGetter,
+	) ([]GPUEVMResult, error)
 }
 
 // IsGPUEligible returns true if a transaction can be dispatched to the
 // GPU EVM kernel. GPU-eligible transactions are simple value transfers:
 // no contract creation, no calldata (which implies no CALL/CREATE/
 // DELEGATECALL in the execution trace).
+//
+// And nothing go_bridge.h's CGpuTx cannot carry: it has one price and no
+// access list, blob hashes, authorizations or tip. A tx with an access list
+// is charged for it, a blob or set-code tx for what it carries, and one whose
+// tip exceeds its fee cap is invalid, which only the Go EVM would see.
 func IsGPUEligible(tx *types.Transaction) bool {
 	if tx.To() == nil {
 		return false
@@ -287,5 +309,10 @@ func IsGPUEligible(tx *types.Transaction) bool {
 	if len(tx.Data()) > 0 {
 		return false
 	}
-	return true
+	switch tx.Type() {
+	case types.LegacyTxType, types.AccessListTxType, types.DynamicFeeTxType:
+	default:
+		return false
+	}
+	return len(tx.AccessList()) == 0 && tx.GasTipCap().Cmp(tx.GasFeeCap()) <= 0
 }

@@ -29,129 +29,122 @@ import "C"
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
-	"github.com/luxfi/geth/common"
-	"github.com/luxfi/geth/core/types"
 	"github.com/luxfi/geth/log"
 )
 
-// GPUEVMDispatcher dispatches GPU-eligible transactions to the C++
-// Metal/CUDA EVM kernel via CGo. Transactions that contain CALL, CREATE,
-// or DELEGATECALL opcodes are not eligible and fall back to Go EVM.
-type GPUEVMDispatcher struct {
-	backend C.uint8_t
-}
+// The C structs executeOnDevice fills and reads, at the sizes go_bridge.h
+// (ABI 6) gives them on LP64. A header that adds, drops or widens a field
+// changes a size, and then this file does not compile until it has been read
+// against the new header: a field it never sets would otherwise cross as
+// zero. Each pair fails when the size is larger (the first) or smaller (the
+// second).
+var (
+	_ [unsafe.Sizeof(C.CGpuTx{}) - 112]struct{}
+	_ [112 - unsafe.Sizeof(C.CGpuTx{})]struct{}
+	_ [unsafe.Sizeof(C.CGpuStateAccount{}) - 136]struct{}
+	_ [136 - unsafe.Sizeof(C.CGpuStateAccount{})]struct{}
+	_ [unsafe.Sizeof(C.CGpuBlockResult{}) - 88]struct{}
+	_ [88 - unsafe.Sizeof(C.CGpuBlockResult{})]struct{}
+	_ [unsafe.Sizeof(C.CBlockContext{}) - 392]struct{}
+	_ [392 - unsafe.Sizeof(C.CBlockContext{})]struct{}
+)
 
 // NewGPUEVMDispatcher creates a dispatcher that routes eligible transactions
 // to the C++ GPU kernel. Auto-detects the best available backend.
 func NewGPUEVMDispatcher() *GPUEVMDispatcher {
-	backend := C.gpu_auto_detect_backend()
+	backend := uint8(C.gpu_auto_detect_backend())
 	log.Info("GPU EVM dispatcher initialized",
-		"backend", gpuBackendName(uint8(backend)),
+		"backend", gpuBackendName(backend),
 	)
-	return &GPUEVMDispatcher{
-		backend: backend,
-	}
+	return &GPUEVMDispatcher{backend: backend, execute: executeOnDevice}
 }
 
-// Available returns true if a GPU backend was detected.
-func (d *GPUEVMDispatcher) Available() bool {
-	return uint8(d.backend) >= 2 // Metal=2, CUDA=3
-}
-
-// Backend returns the name of the active backend.
-func (d *GPUEVMDispatcher) Backend() string {
-	return gpuBackendName(uint8(d.backend))
-}
-
-// ExecuteBlock dispatches a batch of GPU-eligible transactions to the C++
-// Metal/CUDA kernel. Returns per-transaction gas used.
+// executeOnDevice runs batch through go_bridge.h's gpu_execute_block, under
+// Cancun, the one revision the kernels implement.
 //
-// Caller must ensure all txs passed here are GPU-eligible (IsGPUEligible).
-// The signer is needed to recover sender addresses.
-func (d *GPUEVMDispatcher) ExecuteBlock(
-	signer types.Signer,
-	txs []*types.Transaction,
-	senders []common.Address,
-) ([]GPUEVMResult, error) {
-	n := len(txs)
+// ok=0 names no gas or status the caller may use (every status reads
+// EVM_GPU_TX_ERROR, and the arrays may be NULL), so it comes back as
+// ErrGPUDeclined and nothing in it is read.
+func executeOnDevice(backend uint8, b *gpuBatch) ([]GPUEVMResult, error) {
+	n := len(b.txs)
 	if n == 0 {
 		return nil, nil
 	}
 
-	// Pack transactions into C structs.
+	// No Go pointer is stored in any of these: no calldata or code crosses,
+	// so there is nothing to pin.
 	cTxs := make([]C.CGpuTx, n)
-	for i, tx := range txs {
-		// From (sender)
-		copy(cTxs[i].from[:], senders[i][:])
-
-		// To
-		if tx.To() != nil {
-			copy(cTxs[i].to[:], tx.To()[:])
-			cTxs[i].has_to = 1
-		}
-
-		// Data -- for GPU-eligible txs this is empty, but handle it.
-		if len(tx.Data()) > 0 {
-			cTxs[i].data = (*C.uint8_t)(C.CBytes(tx.Data()))
-			cTxs[i].data_len = C.uint32_t(len(tx.Data()))
-		}
-
-		cTxs[i].gas_limit = C.uint64_t(tx.Gas())
-		cTxs[i].value = C.uint64_t(tx.Value().Uint64())
-		cTxs[i].nonce = C.uint64_t(tx.Nonce())
-		if tx.GasPrice() != nil {
-			cTxs[i].gas_price = C.uint64_t(tx.GasPrice().Uint64())
-		}
+	for i := range b.txs {
+		t := &b.txs[i]
+		cTxs[i].from = *(*[20]C.uint8_t)(unsafe.Pointer(&t.From[0]))
+		cTxs[i].to = *(*[20]C.uint8_t)(unsafe.Pointer(&t.To[0]))
+		cTxs[i].has_to = 1
+		cTxs[i].gas_limit = C.uint64_t(t.GasLimit)
+		cTxs[i].value = C.uint64_t(t.Value)
+		cTxs[i].nonce = C.uint64_t(t.Nonce)
+		cTxs[i].gas_price = C.uint64_t(t.GasPrice)
 	}
 
-	// Call C++ via CGo.
+	var cctx C.CBlockContext
+	cctx.timestamp = C.uint64_t(b.ctx.Timestamp)
+	cctx.number = C.uint64_t(b.ctx.Number)
+	cctx.gas_limit = C.uint64_t(b.ctx.GasLimit)
+	cctx.chain_id = C.uint64_t(b.ctx.ChainID)
+	cctx.base_fee = C.uint64_t(b.ctx.BaseFee)
+	cctx.coinbase = *(*[20]C.uint8_t)(unsafe.Pointer(&b.ctx.Coinbase[0]))
+	cctx.prevrandao = *(*[32]C.uint8_t)(unsafe.Pointer(&b.ctx.Prevrandao[0]))
+
+	cAccts := make([]C.CGpuStateAccount, len(b.accounts))
+	for i := range b.accounts {
+		a := &b.accounts[i]
+		cAccts[i].address = *(*[20]C.uint8_t)(unsafe.Pointer(&a.Address[0]))
+		cAccts[i].nonce = C.uint64_t(a.Nonce)
+		for j := 0; j < 4; j++ {
+			cAccts[i].balance[j] = C.uint64_t(a.Balance[j])
+		}
+		cAccts[i].code_hash = *(*[32]C.uint8_t)(unsafe.Pointer(&a.CodeHash[0]))
+		cAccts[i].storage_root = *(*[32]C.uint8_t)(unsafe.Pointer(&a.StorageRoot[0]))
+	}
+	var cAcctsPtr *C.CGpuStateAccount
+	if len(cAccts) > 0 {
+		cAcctsPtr = &cAccts[0]
+	}
+
 	result := C.gpu_execute_block(
-		(*C.CGpuTx)(unsafe.Pointer(&cTxs[0])),
+		&cTxs[0],
 		C.uint32_t(n),
-		d.backend,
+		C.uint8_t(backend),
+		0, // num_threads: hardware concurrency
+		C.uint8_t(C.EVM_GPU_REV_CANCUN),
+		&cctx,
+		cAcctsPtr,
+		C.uint32_t(len(cAccts)),
+		nil, // code_blob: no row has code
+		0,
 	)
-
-	// Free any calldata we allocated.
-	for i := range cTxs {
-		if cTxs[i].data != nil {
-			C.free(unsafe.Pointer(cTxs[i].data))
-		}
-	}
+	defer C.gpu_free_result(&result)
+	runtime.KeepAlive(cTxs)
+	runtime.KeepAlive(cAccts)
 
 	if result.ok == 0 {
-		C.gpu_free_result(&result)
-		return nil, fmt.Errorf("gpu evm execute_block failed")
+		return nil, ErrGPUDeclined
 	}
-
-	// Unpack results.
-	gasUsedSlice := unsafe.Slice((*C.uint64_t)(result.gas_used), n)
-	results := make([]GPUEVMResult, n)
-	for i := 0; i < n; i++ {
-		results[i] = GPUEVMResult{
-			GasUsed: uint64(gasUsedSlice[i]),
-			Success: true,
+	if int(result.num_txs) != n || result.gas_used == nil || result.status == nil {
+		return nil, fmt.Errorf("gpu evm: result for %d txs is not the batch's %d", uint32(result.num_txs), n)
+	}
+	gas := unsafe.Slice((*C.uint64_t)(unsafe.Pointer(result.gas_used)), n)
+	status := unsafe.Slice((*C.uint8_t)(unsafe.Pointer(result.status)), n)
+	out := make([]GPUEVMResult, n)
+	for i := range out {
+		out[i] = GPUEVMResult{
+			GasUsed: uint64(gas[i]),
+			Success: status[i] == C.EVM_GPU_TX_OK || status[i] == C.EVM_GPU_TX_RETURN,
 		}
 	}
-
-	C.gpu_free_result(&result)
-	return results, nil
-}
-
-func gpuBackendName(b uint8) string {
-	switch b {
-	case 0:
-		return "CPU-Sequential"
-	case 1:
-		return "CPU-Parallel"
-	case 2:
-		return "Metal"
-	case 3:
-		return "CUDA"
-	default:
-		return "Unknown"
-	}
+	return out, nil
 }
 
 // WithGPUOpcodes returns an EngineOption that enables GPU EVM opcode dispatch

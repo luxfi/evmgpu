@@ -100,6 +100,8 @@ func productionSeams(sdb *state.StateDB, config *ethparams.ChainConfig, header *
 			return MemoryValue{Storage: sdb.GetState(loc.Address, loc.Slot)}, true
 		case LocationCodeHash:
 			return MemoryValue{Storage: sdb.GetCodeHash(loc.Address)}, true
+		case LocationStorageRoot:
+			return MemoryValue{Storage: sdb.GetStorageRoot(loc.Address)}, true
 		}
 		return MemoryValue{}, false
 	}
