@@ -99,6 +99,13 @@ func TestALibraryOfAnotherABIDisablesTheDispatcher(t *testing.T) {
 	results, err := d.ExecuteBlock(config, header, txs, senders, getter)
 	require.ErrorIs(t, err, ErrGPUDeclined)
 	require.Nil(t, results)
+
+	// The device call itself sends such a library nothing.
+	batch, ok := shapeGPUBatch(config, header, txs, senders, getter)
+	require.True(t, ok)
+	results, err = executeOnDevice(d.backend, batch)
+	require.ErrorIs(t, err, ErrGPUDeclined)
+	require.Nil(t, results)
 }
 
 func TestGPUEVMDispatcher_ExecuteBlock_Empty(t *testing.T) {
