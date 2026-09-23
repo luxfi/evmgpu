@@ -179,10 +179,8 @@ func shapeGPUBatch(
 		if !ok {
 			return nil, false
 		}
-		tipCap, ok := fitsUint64(tx.GasTipCap())
-		if !ok {
-			return nil, false
-		}
+		// The tip is at most the fee cap (IsGPUEligible), so it fits too.
+		tipCap := tx.GasTipCap().Uint64()
 		to := *tx.To()
 		b.txs[i] = gpuTx{
 			From:      senders[i],

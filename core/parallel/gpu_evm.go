@@ -65,13 +65,18 @@ var (
 	_ [392 - unsafe.Sizeof(C.CBlockContext{})]struct{}
 )
 
-// libraryABI is the ABI the loaded library reports (gpu_abi_version), read
-// once in init. The library a binary loads at run time need not be the one
-// whose header it was built against.
+// libraryABI is the ABI the loaded library speaks, read once in init: the one
+// it reports (gpu_abi_version), or 0 where its CGpuTx is not this file's
+// (gpu_abi_tx_size), as it is not in a version 7 library built before the tx
+// carried its fee cap and tip. The library a binary loads at run time need not
+// be the one whose header it was built against.
 var libraryABI uint32
 
 func init() {
 	libraryABI = uint32(C.gpu_abi_version())
+	if uint32(C.gpu_abi_tx_size()) != uint32(unsafe.Sizeof(C.CGpuTx{})) {
+		libraryABI = 0
+	}
 }
 
 // NewGPUEVMDispatcher creates a dispatcher that routes eligible transactions
